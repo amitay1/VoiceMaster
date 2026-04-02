@@ -219,9 +219,12 @@ var PH={1:["Turn to page 394.","Obviously.","You have your mother's eyes.","Alwa
 
 /* ═══ STATE ═══ */
 var G={name:"",isHost:false,code:"",players:[],scores:{},round:0,rounds:[],
-  turnIdx:0,turnScores:[],myScore:null,char:null,phrase:"",TOTAL_ROUNDS:4};
+  turnIdx:0,turnScores:[],myScore:null,char:null,phrase:"",TOTAL_ROUNDS:4,gameStarted:false};
 var peer=null,conns=[],hostConn=null;
 var MR,STM,ACX,ANA,DA=[],RTI,WAF,COL,rtVal=0;
+var HEARTBEAT_INTERVAL=10000;
+var HEARTBEAT_TIMEOUT=25000;
+var heartbeatTimers={};
 
 /* ═══ HELPERS ═══ */
 function $(i){return document.getElementById(i);}
@@ -259,6 +262,62 @@ function addLog(msg){
   console.log('[VM]',msg);
 }
 
+/* ═══ HEARTBEAT & CONNECTION HEALTH ═══ */
+function startHeartbeat(conn,label){
+  var key=conn.peer||label;
+  if(heartbeatTimers[key])clearTimers(key);
+  heartbeatTimers[key]={lastPong:Date.now()};
+  heartbeatTimers[key].ping=setInterval(function(){
+    try{conn.send({type:'ping'});}catch(e){}
+  },HEARTBEAT_INTERVAL);
+  heartbeatTimers[key].check=setInterval(function(){
+    if(Date.now()-heartbeatTimers[key].lastPong>HEARTBEAT_TIMEOUT){
+      addLog('💀 '+label+' timed out');
+      clearTimers(key);
+      try{conn.close();}catch(e){}
+    }
+  },HEARTBEAT_INTERVAL);
+}
+function handlePong(conn){
+  var key=conn.peer||'host';
+  if(heartbeatTimers[key])heartbeatTimers[key].lastPong=Date.now();
+}
+function clearTimers(key){
+  if(!heartbeatTimers[key])return;
+  clearInterval(heartbeatTimers[key].ping);
+  clearInterval(heartbeatTimers[key].check);
+  delete heartbeatTimers[key];
+}
+
+/* ═══ DUPLICATE NAME HANDLER ═══ */
+function uniqueName(name,existingNames){
+  if(existingNames.indexOf(name)<0)return name;
+  var n=2;while(existingNames.indexOf(name+'('+n+')')>=0)n++;
+  return name+'('+n+')';
+}
+
+/* ═══ DISCONNECTED PLAYER HANDLER ═══ */
+function handlePlayerDisconnectDuringGame(playerName){
+  if(!G.gameStarted)return;
+  addLog('⚠️ '+playerName+' disconnected during game');
+  /* Auto-submit a zero score for the disconnected player so game doesn't get stuck */
+  var roundScores=G.turnScores.filter(function(s){return s.round===G.round;});
+  var alreadyScored=roundScores.some(function(s){return s.player===playerName;});
+  if(!alreadyScored){
+    G.turnScores.push({player:playerName,score:0,round:G.round});
+    if(!G.scores[playerName])G.scores[playerName]=0;
+    var allScored=G.turnScores.filter(function(s){return s.round===G.round;});
+    if(allScored.length>=G.players.length){
+      broadcast({type:'round_end',turnScores:G.turnScores,scores:G.scores,round:G.round});
+      showRoundSummary();
+    }else{
+      var nextIdx=allScored.length;
+      broadcast({type:'turn',round:G.round,charId:G.char.id,phrase:G.phrase,turnPlayer:G.players[nextIdx],turnIdx:nextIdx,turnScores:G.turnScores,scores:G.scores});
+      handleMyTurn(G.players[nextIdx]);
+    }
+  }
+}
+
 /* ═══ PEERJS MULTIPLAYER ═══ */
 function createRoom(){
   if(!nm())return;
@@ -288,12 +347,29 @@ function createRoom(){
     addLog('🔗 New player connecting...');
     conn.on('open',function(){
       console.log('[VM] HOST: Connection opened with',conn.metadata?.name);
+      startHeartbeat(conn,conn.metadata?.name||conn.peer);
     });
-    conn.on('data',function(d){hostHandle(conn,d);});
+    conn.on('data',function(d){
+      if(d.type==='pong'){handlePong(conn);return;}
+      if(d.type==='ping'){try{conn.send({type:'pong'});}catch(e){}return;}
+      hostHandle(conn,d);
+    });
     conn.on('close',function(){
+      clearTimers(conn.peer);
+      var disconnectedName=conn.metadata&&conn.metadata.name;
       conns=conns.filter(function(c){return c!==conn;});
-      if(conn.metadata&&conn.metadata.name){G.players=G.players.filter(function(p){return p!==conn.metadata.name;});}
-      broadcastLobby();renderLobby();addLog('👋 Player disconnected');
+      if(disconnectedName){
+        /* Check if this player reconnected (same name, different conn) */
+        var reconnected=conns.some(function(c){return c.metadata&&c.metadata.name===disconnectedName;});
+        if(!reconnected){
+          G.players=G.players.filter(function(p){return p!==disconnectedName;});
+          if(G.isHost&&G.gameStarted)handlePlayerDisconnectDuringGame(disconnectedName);
+        }
+      }
+      broadcastLobby();renderLobby();addLog('👋 Player disconnected'+(disconnectedName?' ('+disconnectedName+')':''));
+    });
+    conn.on('error',function(err){
+      console.log('[VM] HOST: Connection error with',conn.metadata?.name,err);
     });
     conns.push(conn);
   });
@@ -363,10 +439,19 @@ function joinRoom(){
           connected=true;clearTimeout(timeout);
           console.log('[VM] Connected to host!');
           hostConn.send({type:'join',name:G.name});
+          startHeartbeat(hostConn,'host');
           $('joinStatus').innerHTML='<span class="dot" style="background:#22c55e"></span> Connected! Joining lobby...';
         });
-        hostConn.on('data',function(d){guestHandle(d);});
-        hostConn.on('close',function(){alert('Host disconnected');go('p-home');});
+        hostConn.on('data',function(d){
+          if(d.type==='pong'){handlePong(hostConn);return;}
+          if(d.type==='ping'){try{hostConn.send({type:'pong'});}catch(e){}return;}
+          guestHandle(d);
+        });
+        hostConn.on('close',function(){
+          clearTimers('host');
+          addLog('⚠️ Lost connection to host, attempting to reconnect...');
+          guestReconnect();
+        });
         hostConn.on('error',function(err){
           console.log('[VM] Conn error:',err);
           if(!connected&&attempt<maxAttempts){clearTimeout(timeout);setTimeout(tryConnect,2000);}
@@ -392,17 +477,103 @@ function joinRoom(){
         $('joinErr').innerHTML='Error: '+e.type;$('joinErr').style.display='block';
       }
     });
+    peer.on('disconnected',function(){
+      console.log('[VM] GUEST: PeerJS server disconnected, reconnecting...');
+      addLog('⚠️ Disconnected from server, reconnecting...');
+      try{peer.reconnect();}catch(e){console.log('[VM] Guest reconnect failed:',e);}
+    });
   }
 
   tryConnect();
 }
 
+/* GUEST: reconnect to host after disconnection */
+function guestReconnect(){
+  if(!G.code)return;
+  var prefix='vm-'+G.code.toLowerCase();
+  var rAttempt=0;var maxReconn=5;
+  function tryReconn(){
+    rAttempt++;
+    if(rAttempt>maxReconn){
+      alert('Lost connection to host after '+maxReconn+' attempts.');
+      go('p-home');return;
+    }
+    addLog('🔄 Reconnect attempt '+rAttempt+'/'+maxReconn+'...');
+    if(!peer||peer.destroyed){
+      peer=new Peer(undefined, PEER_CONFIG);
+      peer.on('open',function(){doReconn();});
+      peer.on('error',function(e){
+        console.log('[VM] Reconnect peer error:',e.type);
+        if(rAttempt<maxReconn)setTimeout(tryReconn,3000);
+        else{alert('Could not reconnect.');go('p-home');}
+      });
+      peer.on('disconnected',function(){
+        console.log('[VM] GUEST: PeerJS server disconnected, reconnecting...');
+        try{peer.reconnect();}catch(e){console.log('[VM] Reconnect failed:',e);}
+      });
+    }else if(peer.disconnected){
+      try{peer.reconnect();}catch(e){}
+      setTimeout(doReconn,1000);
+    }else{
+      doReconn();
+    }
+    function doReconn(){
+      hostConn=peer.connect(prefix,{metadata:{name:G.name},reliable:true,serialization:'json'});
+      if(!hostConn){if(rAttempt<maxReconn)setTimeout(tryReconn,3000);return;}
+      var reconnected=false;
+      var rTimeout=setTimeout(function(){
+        if(!reconnected&&rAttempt<maxReconn)setTimeout(tryReconn,3000);
+      },8000);
+      hostConn.on('open',function(){
+        reconnected=true;clearTimeout(rTimeout);
+        console.log('[VM] Reconnected to host!');
+        addLog('✅ Reconnected!');
+        hostConn.send({type:'rejoin',name:G.name});
+        startHeartbeat(hostConn,'host');
+      });
+      hostConn.on('data',function(d){
+        if(d.type==='pong'){handlePong(hostConn);return;}
+        if(d.type==='ping'){try{hostConn.send({type:'pong'});}catch(e){}return;}
+        guestHandle(d);
+      });
+      hostConn.on('close',function(){
+        clearTimers('host');
+        if(rAttempt<maxReconn)setTimeout(tryReconn,3000);
+        else{alert('Host disconnected.');go('p-home');}
+      });
+      hostConn.on('error',function(err){
+        console.log('[VM] Reconnect conn error:',err);
+        if(!reconnected&&rAttempt<maxReconn){clearTimeout(rTimeout);setTimeout(tryReconn,3000);}
+      });
+    }
+  }
+  setTimeout(tryReconn,2000);
+}
+
 /* HOST: handle messages from guests */
 function hostHandle(conn,msg){
   if(msg.type==='join'){
+    var safeName=uniqueName(msg.name,G.players);
+    conn.metadata={name:safeName};
+    if(G.players.indexOf(safeName)<0)G.players.push(safeName);
+    /* Let the guest know their actual name (in case it was changed) */
+    try{conn.send({type:'name_assigned',name:safeName});}catch(e){}
+    broadcastLobby();renderLobby();
+  }
+  if(msg.type==='rejoin'){
+    /* Player reconnecting - re-add if missing */
     conn.metadata={name:msg.name};
     if(G.players.indexOf(msg.name)<0)G.players.push(msg.name);
+    startHeartbeat(conn,msg.name);
     broadcastLobby();renderLobby();
+    /* If game is in progress, send current state */
+    if(G.gameStarted&&G.char){
+      var roundScores=G.turnScores.filter(function(s){return s.round===G.round;});
+      var currentTurnIdx=roundScores.length;
+      var currentTurnPlayer=currentTurnIdx<G.players.length?G.players[currentTurnIdx]:null;
+      try{conn.send({type:'turn',round:G.round,charId:G.char.id,phrase:G.phrase,turnPlayer:currentTurnPlayer||G.players[0],turnIdx:currentTurnIdx,turnScores:G.turnScores,scores:G.scores});}catch(e){}
+    }
+    addLog('🔄 '+msg.name+' reconnected!');
   }
   if(msg.type==='score'){
     G.turnScores.push({player:msg.name,score:msg.score,round:G.round});
@@ -427,10 +598,18 @@ function broadcast(msg){conns.forEach(function(c){try{c.send(msg);}catch(e){}});
 
 /* GUEST: handle messages from host */
 function guestHandle(msg){
+  if(msg.type==='name_assigned'){
+    /* Host may have changed our name to avoid duplicates */
+    if(msg.name!==G.name){
+      addLog('ℹ️ Name changed to "'+msg.name+'" to avoid duplicate');
+      G.name=msg.name;
+    }
+  }
   if(msg.type==='lobby'){
     G.players=msg.players;G.code=msg.code;renderLobby();go('p-lobby');
   }
   if(msg.type==='turn'){
+    G.gameStarted=true;
     G.round=msg.round;G.char=CH.find(function(c){return c.id===msg.charId;});G.phrase=msg.phrase;
     G.turnIdx=msg.turnIdx;G.turnScores=msg.turnScores||[];G.scores=msg.scores||{};
     handleMyTurn(msg.turnPlayer);
@@ -452,6 +631,7 @@ function guestHandle(msg){
 /* ═══ GAME FLOW ═══ */
 function startGame(){
   if(G.players.length<2)return;
+  G.gameStarted=true;
   G.rounds=CH.sort(function(){return Math.random()-.5;}).slice(0,G.TOTAL_ROUNDS);
   G.round=0;G.scores={};G.turnScores=[];
   G.char=G.rounds[0];G.phrase=pk(PH[G.char.id]);
@@ -551,6 +731,7 @@ function showRoundSummary(){
 }
 
 function showFinal(){
+  G.gameStarted=false;
   var sorted=Object.entries(G.scores).sort(function(a,b){return b[1]-a[1];});
   var win=sorted[0][0]===G.name;var col=win?'#fbbf24':'#ec4899';
   var h='<div style="font-size:50px">'+(win?'🏆':'🎉')+'</div>';
@@ -676,7 +857,7 @@ $('bJoinBk').onclick=function(){go('p-home');};
 $('bJoin').onclick=joinRoom;
 $('bSolo').onclick=goSolo;
 $('bCharsBk').onclick=function(){go('p-home');};
-$('bLobbyBk').onclick=function(){if(peer)peer.destroy();peer=null;conns=[];hostConn=null;go('p-home');};
+$('bLobbyBk').onclick=function(){if(peer)peer.destroy();peer=null;conns=[];hostConn=null;Object.keys(heartbeatTimers).forEach(clearTimers);G.gameStarted=false;go('p-home');};
 $('bStart').onclick=startGame;
 $('bRec').onclick=doRecCD;
 $('bStop').onclick=function(){if(MR&&MR.state==='recording')MR.stop();};
