@@ -221,6 +221,7 @@ var PH={1:["Turn to page 394.","Obviously.","You have your mother's eyes.","Alwa
 var G={name:"",isHost:false,code:"",players:[],scores:{},round:0,rounds:[],
   turnIdx:0,turnScores:[],myScore:null,char:null,phrase:"",TOTAL_ROUNDS:4};
 var peer=null,conns=[],hostConn=null;
+var keepAliveInterval=null;
 var MR,STM,ACX,ANA,DA=[],RTI,WAF,COL,rtVal=0;
 
 /* ═══ HELPERS ═══ */
@@ -228,7 +229,7 @@ function $(i){return document.getElementById(i);}
 function go(i){document.querySelectorAll('.pg').forEach(function(p){p.classList.remove('on');});$(i).classList.add('on');}
 function pk(a){return a[Math.floor(Math.random()*a.length)];}
 function cl(v,lo,hi){return Math.min(hi,Math.max(lo,Math.round(v)));}
-function gc(){return Math.random().toString(36).substring(2,6).toUpperCase();}
+function gc(){return Math.random().toString(36).substring(2,8).padEnd(6,'0').toUpperCase();}
 function nm(){var n=$('iName').value.trim();if(!n){$('nErr').textContent='Enter your name!';$('nErr').style.display='block';return false;}G.name=n;$('nErr').style.display='none';return true;}
 function speakAs(id,txt,onEnd){if(!window.speechSynthesis){if(onEnd)onEnd();return;}window.speechSynthesis.cancel();var c=CH.find(function(x){return x.id===id;});var pr=c?c.sp:{p:1,r:1};var u=new SpeechSynthesisUtterance(txt);u.pitch=pr.p;u.rate=pr.r;u.volume=1;var vs=window.speechSynthesis.getVoices();var ev=vs.find(function(v){return v.lang.indexOf('en')===0;})||vs[0];if(ev)u.voice=ev;u.onend=function(){if(onEnd)onEnd();};u.onerror=function(){if(onEnd)onEnd();};window.speechSynthesis.speak(u);}
 function aN(el,val){var t0=Date.now();(function t(){var p=Math.min(1,(Date.now()-t0)/1200);el.textContent=Math.round((1-Math.pow(1-p,3))*val);if(p<1)requestAnimationFrame(t);})();}
@@ -236,10 +237,6 @@ function aN(el,val){var t0=Date.now();(function t(){var p=Math.min(1,(Date.now()
 /* ═══ PEERJS CONFIG (global) ═══ */
 var PEER_CONFIG = {
   debug: 1,
-  host: '0.peerjs.com',
-  port: 443,
-  secure: true,
-  path: '/',
   config: {
     iceServers: [
       {urls: 'stun:stun.l.google.com:19302'},
@@ -279,7 +276,8 @@ function createRoom(){
     console.log('[VM] HOST: Peer registered as',id);
     renderLobby();go('p-lobby');
     /* Keep connection alive by checking periodically */
-    setInterval(function(){
+    if(keepAliveInterval)clearInterval(keepAliveInterval);
+    keepAliveInterval=setInterval(function(){
       if(peer&&peer.disconnected){addLog('⚠️ Reconnecting...');try{peer.reconnect();}catch(e){}}
     },15000);
   });
@@ -323,7 +321,7 @@ function joinRoom(){
   G.isHost=false;G.code=code;
   $('joinErr').style.display='none';
   var prefix='vm-'+code.toLowerCase();
-  var attempt=0;var maxAttempts=3;
+  var attempt=0;var maxAttempts=5;
 
   function tryConnect(){
     attempt++;
@@ -339,15 +337,15 @@ function joinRoom(){
         console.log('[VM] Attempt '+attempt+' timed out');
         try{peer.destroy();}catch(e){}
         if(attempt<maxAttempts){
-          $('joinStatus').innerHTML='<span style="color:#fbbf24;font-size:11px">⏳ Retrying in 2 seconds... ('+attempt+'/'+maxAttempts+')</span>';
-          setTimeout(tryConnect,2000);
+          $('joinStatus').innerHTML='<span style="color:#fbbf24;font-size:11px">⏳ Retrying in 3 seconds... ('+attempt+'/'+maxAttempts+')</span>';
+          setTimeout(tryConnect,3000);
         }else{
           $('joinStatus').style.display='none';
           $('joinErr').innerHTML='❌ Could not find room "<b>'+code+'</b>" after '+maxAttempts+' attempts.<br><span style="font-size:10px;color:#94a3b8">Make sure:<br>• The host still has the room open<br>• Both of you use the SAME link ('+location.origin+')<br>• The code is typed correctly</span>';
           $('joinErr').style.display='block';
         }
       }
-    },8000);
+    },12000);
 
     peer.on('open',function(myId){
       console.log('[VM] Attempt '+attempt+': My peer ID:',myId,'. Looking for:',prefix);
@@ -380,7 +378,7 @@ function joinRoom(){
         clearTimeout(timeout);
         if(attempt<maxAttempts){
           $('joinStatus').innerHTML='<span style="color:#fbbf24;font-size:11px">⏳ Room not found yet, retrying... ('+attempt+'/'+maxAttempts+')</span>';
-          setTimeout(tryConnect,2000);
+          setTimeout(tryConnect,3000);
         }else{
           $('joinStatus').style.display='none';
           $('joinErr').innerHTML='❌ Room "<b>'+code+'</b>" not found!<br><span style="font-size:10px;color:#94a3b8">The host needs to keep the room page open.<br>Make sure you\'re both on: '+location.origin+'</span>';
@@ -400,8 +398,12 @@ function joinRoom(){
 /* HOST: handle messages from guests */
 function hostHandle(conn,msg){
   if(msg.type==='join'){
-    conn.metadata={name:msg.name};
-    if(G.players.indexOf(msg.name)<0)G.players.push(msg.name);
+    var assignedName=msg.name;
+    var suffix=2;
+    while(G.players.indexOf(assignedName)>=0&&suffix<100){assignedName=msg.name+suffix;suffix++;}
+    conn.metadata={name:assignedName};
+    G.players.push(assignedName);
+    if(assignedName!==msg.name)conn.send({type:'name_assigned',name:assignedName});
     broadcastLobby();renderLobby();
   }
   if(msg.type==='score'){
@@ -427,6 +429,9 @@ function broadcast(msg){conns.forEach(function(c){try{c.send(msg);}catch(e){}});
 
 /* GUEST: handle messages from host */
 function guestHandle(msg){
+  if(msg.type==='name_assigned'){
+    G.name=msg.name;
+  }
   if(msg.type==='lobby'){
     G.players=msg.players;G.code=msg.code;renderLobby();go('p-lobby');
   }
@@ -452,7 +457,7 @@ function guestHandle(msg){
 /* ═══ GAME FLOW ═══ */
 function startGame(){
   if(G.players.length<2)return;
-  G.rounds=CH.sort(function(){return Math.random()-.5;}).slice(0,G.TOTAL_ROUNDS);
+  G.rounds=CH.slice().sort(function(){return Math.random()-.5;}).slice(0,G.TOTAL_ROUNDS);
   G.round=0;G.scores={};G.turnScores=[];
   G.char=G.rounds[0];G.phrase=pk(PH[G.char.id]);
   broadcast({type:'turn',round:0,charId:G.char.id,phrase:G.phrase,turnPlayer:G.players[0],turnIdx:0,turnScores:[],scores:{}});
@@ -520,7 +525,9 @@ function renderLobby(){
 
 function showWaitScreen(turnPlayer){
   $('waitRound').textContent='Round '+(G.round+1)+'/'+G.TOTAL_ROUNDS;
-  $('waitEmoji').textContent=G.char.e;$('waitChar').textContent=G.char.n;$('waitChar').style.color=G.char.c;
+  if(G.char){
+    $('waitEmoji').textContent=G.char.e;$('waitChar').textContent=G.char.n;$('waitChar').style.color=G.char.c;
+  }
   $('waitMsg').textContent='🎤 '+turnPlayer+"'s turn...";
   var rs=G.turnScores.filter(function(s){return s.round===G.round;});
   if(rs.length>0){$('waitScores').style.display='block';$('waitScores').innerHTML='<div class="lb" style="margin-bottom:6px">Scores this round</div>'+rs.map(function(s){return '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px"><span style="color:#94a3b8">'+s.player+'</span><span style="font-weight:700;color:#fbbf24">'+s.score+'</span></div>';}).join('');}
@@ -608,25 +615,14 @@ function xF(){
 /* AI SCORING */
 function analyze(f){
   $('bStop').style.display='none';$('recTimer').style.display='none';
-  $('recAnalyze').innerHTML='<div style="text-align:center;padding:12px"><div style="width:28px;height:28px;border:3px solid #8b5cf6;border-top-color:transparent;border-radius:50%;animation:sp .8s linear infinite;margin:0 auto 8px"></div><p style="font-size:12px;font-weight:700;color:#a78bfa">🧠 AI analyzing your '+G.char.n+'...</p></div>';
+  $('recAnalyze').innerHTML='<div style="text-align:center;padding:12px"><div style="width:28px;height:28px;border:3px solid #8b5cf6;border-top-color:transparent;border-radius:50%;animation:sp .8s linear infinite;margin:0 auto 8px"></div><p style="font-size:12px;font-weight:700;color:#a78bfa">Analyzing...</p></div>';
   $('recAnalyze').style.display='block';
 
-  // Try Anthropic API first
-  aiAnalyze(f).then(function(sc){
+  setTimeout(function(){
+    var sc=localScore(f);
     $('recAnalyze').style.display='none';
     G.myScore=sc;showResult(sc);go('p-res');
-  });
-}
-
-function aiAnalyze(f){
-  return fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,
-      messages:[{role:"user",content:"You are the world's top voice impression judge. Score this impression.\n\nCHARACTER: "+G.char.n+" ("+G.char.a+" in "+G.char.m+")\nVOICE PROFILE: "+G.char.vd+"\nPHRASE: \""+G.phrase+"\"\nDURATION: "+f.dur.toFixed(1)+"s\n\nAUDIO FEATURES:\n- Spectral centroid: "+f.aC.toFixed(0)+"Hz ("+(f.vD?"very deep":f.dp?"deep":f.vH?"very high":f.hi?"high":"medium")+")\n- Low/High ratio: "+f.aL.toFixed(1)+" ("+(f.aL>6?"very bass-heavy":f.aL>3?"bass-heavy":f.aL<1.5?"treble-heavy":"balanced")+")\n- Energy: "+f.aR.toFixed(3)+" ("+(f.qt?"very quiet":f.ld?"loud":"moderate")+")\n- Variance: "+f.rV.toFixed(4)+" ("+(f.mn?"monotone":f.vE?"very expressive":f.ex?"expressive":"steady")+")\n- Pitch jumps: "+f.aJ.toFixed(0)+" ("+(f.er?"erratic":"stable")+")\n- Pause ratio: "+(f.pR*100).toFixed(0)+"%\n- Est. pace: ~"+f.wpm+" WPM ("+(f.sw?"slow":f.fa?"fast":"moderate")+")\n- Gravelly: "+(f.gr?"yes":"no")+"\n\nBe fair (40-75 typical, 85+ exceptional). Respond ONLY JSON (no markdown):\n{\"total\":<1-100>,\"pitch\":<1-100>,\"tone\":<1-100>,\"timing\":<1-100>,\"expression\":<1-100>,\"feedback\":\"<2 sentences>\",\"reaction\":\"<funny in-character quote>\"}"}]})
-  }).then(function(r){return r.json();}).then(function(d){
-    var txt=d.content.map(function(c){return c.text||"";}).join("");
-    return JSON.parse(txt.replace(/```json|```/g,"").trim());
-  }).catch(function(){return localScore(f);});
+  },800);
 }
 
 function localScore(f){
@@ -676,7 +672,7 @@ $('bJoinBk').onclick=function(){go('p-home');};
 $('bJoin').onclick=joinRoom;
 $('bSolo').onclick=goSolo;
 $('bCharsBk').onclick=function(){go('p-home');};
-$('bLobbyBk').onclick=function(){if(peer)peer.destroy();peer=null;conns=[];hostConn=null;go('p-home');};
+$('bLobbyBk').onclick=function(){if(keepAliveInterval){clearInterval(keepAliveInterval);keepAliveInterval=null;}if(peer)peer.destroy();peer=null;conns=[];hostConn=null;go('p-home');};
 $('bStart').onclick=startGame;
 $('bRec').onclick=doRecCD;
 $('bStop').onclick=function(){if(MR&&MR.state==='recording')MR.stop();};
@@ -691,6 +687,11 @@ $('bListen').onclick=function(){
 try{var qp=new URLSearchParams(location.search);if(qp.get('room'))$('iJoinCode').value=qp.get('room');}catch(e){}
 /* Preload voices */
 if(window.speechSynthesis)window.speechSynthesis.onvoiceschanged=function(){window.speechSynthesis.getVoices();};
+
+/* Expose functions needed by inline onclick handlers */
+window.nextRound=nextRound;
+window.submitScore=submitScore;
+window.go=go;
 });
 </script>
 </body>
