@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>VoiceMaster 🎤</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#0b0f1a;color:#f1f5f9;font-family:-apple-system,system-ui,sans-serif;min-height:100dvh}
+#app{max-width:430px;margin:0 auto;min-height:100dvh;position:relative;padding-bottom:50px}
+.pg{display:none}.pg.on{display:block;animation:fi .3s ease}
+@keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes bn{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes pu{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes sp{to{transform:rotate(360deg)}}
+.cd{background:rgba(255,255,255,.04);border-radius:18px;border:1px solid rgba(255,255,255,.07);padding:16px;margin-bottom:10px}
+.bt{display:block;width:100%;border:none;border-radius:14px;color:#fff;padding:15px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;transition:.12s;text-align:center}
+.bt:active{transform:scale(.97)}.bt:disabled{opacity:.4;cursor:not-allowed}
+.inp{width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:#f1f5f9;font-size:15px;outline:none;margin-top:6px}
+.inp:focus{border-color:#8b5cf688}.inp::placeholder{color:#475569}
+.bk{background:rgba(255,255,255,.07);border:none;border-radius:10px;color:#f1f5f9;padding:8px 12px;font-size:15px;cursor:pointer}
+.lb{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1.5px;font-weight:600}
+.rw{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.rw:last-child{border-bottom:none}
+.av{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800}
+.wav{width:100%;height:70px;border-radius:12px;background:#080c16;border:1px solid rgba(255,255,255,.06)}
+.bar-t{height:7px;border-radius:4px;background:#1e293b;overflow:hidden;margin-top:3px}
+.bar-f{height:100%;border-radius:4px;width:0;transition:width 1s cubic-bezier(.25,1,.5,1)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.pulse-dot{animation:pu 1.5s infinite}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- HOME -->
+<div id="p-home" class="pg on">
+  <div style="text-align:center;padding-top:46px">
+    <div style="font-size:54px;animation:bn 2s infinite">🎤</div>
+    <h1 style="font-size:32px;font-weight:900;margin-top:6px;background:linear-gradient(135deg,#ec4899,#8b5cf6,#06b6d4);-webkit-background-clip:text;-webkit-text-fill-color:transparent">VoiceMaster</h1>
+    <p style="color:#64748b;font-size:12px;margin-top:4px">Voice Impression Challenge</p>
+    <div style="width:40px;height:2px;background:linear-gradient(90deg,#ec4899,#8b5cf6);margin:14px auto 24px;border-radius:2px"></div>
+  </div>
+  <div style="padding:0 20px">
+    <div class="cd"><div class="lb">Your Name</div><input class="inp" id="iName" placeholder="Enter name..." maxlength="20"><div id="nErr" style="color:#f87171;font-size:11px;margin-top:4px;display:none"></div></div>
+    <button class="bt" style="background:linear-gradient(135deg,#ec4899,#db2777)" id="bCreate">🎮 Create Room (Host)</button>
+    <button class="bt" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed)" id="bJoinNav">🔗 Join a Room</button>
+    <button class="bt" style="background:linear-gradient(135deg,#06b6d4,#0891b2)" id="bSolo">🎭 Solo Practice</button>
+  </div>
+</div>
+
+<!-- JOIN -->
+<div id="p-join" class="pg">
+  <div style="padding:14px 18px 6px;display:flex;align-items:center;gap:10px"><button class="bk" id="bJoinBk">←</button><h2 style="font-size:17px;font-weight:800">Join Room</h2></div>
+  <div style="padding:6px 20px">
+    <div class="cd" style="text-align:center">
+      <div style="font-size:40px;margin-bottom:6px">🔗</div>
+      <p style="color:#94a3b8;font-size:12px;margin-bottom:10px">Enter the code the host gave you</p>
+      <input class="inp" id="iJoinCode" placeholder="ROOM CODE" maxlength="6" style="text-align:center;letter-spacing:8px;font-size:24px;font-weight:800;text-transform:uppercase">
+      <div id="joinErr" style="color:#f87171;font-size:11px;margin-top:6px;display:none"></div>
+      <button class="bt" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed)" id="bJoin">Join Game</button>
+      <div id="joinStatus" style="display:none;margin-top:10px;font-size:12px;color:#a78bfa"></div>
+    </div>
+  </div>
+</div>
+
+<!-- LOBBY -->
+<div id="p-lobby" class="pg">
+  <div style="padding:14px 18px 6px;display:flex;align-items:center;gap:10px"><button class="bk" id="bLobbyBk">←</button><h2 style="font-size:17px;font-weight:800">Game Lobby</h2></div>
+  <div style="padding:4px 20px;text-align:center">
+    <div class="cd" style="background:linear-gradient(135deg,rgba(236,72,153,.1),rgba(139,92,246,.06))">
+      <div class="lb" style="letter-spacing:3px">Room Code</div>
+      <div id="lobCode" style="font-size:30px;font-weight:900;letter-spacing:8px;color:#ec4899;margin-top:2px"></div>
+      <p style="color:#64748b;font-size:10px;margin-top:4px">Tell your friends to enter this code!</p>
+    </div>
+    <div id="lobStatus" style="font-size:11px;margin-bottom:6px"></div>
+    <div id="lobPlayers" class="cd" style="text-align:left"></div>
+    <div id="lobWait" style="text-align:center;padding:6px;color:#a78bfa;font-size:11px"><span class="dot pulse-dot" style="background:#22c55e"></span>Waiting for players to join...</div>
+    <button class="bt" style="background:linear-gradient(135deg,#ec4899,#db2777)" id="bStart" disabled>🚀 Start Game!</button>
+    <div id="lobGuest" style="display:none;color:#94a3b8;font-size:12px;margin-top:10px">Waiting for host to start the game...</div>
+  </div>
+</div>
+
+<!-- WAITING (other player's turn) -->
+<div id="p-wait" class="pg">
+  <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center">
+    <div style="padding:20px">
+      <div id="waitRound" class="lb" style="letter-spacing:3px"></div>
+      <div id="waitEmoji" style="font-size:50px;margin:12px 0"></div>
+      <h3 id="waitChar" style="font-size:20px;font-weight:800"></h3>
+      <div class="cd" style="margin-top:16px;background:rgba(139,92,246,.08)">
+        <p id="waitMsg" style="font-size:16px;font-weight:700;color:#8b5cf6;margin:0"></p>
+        <div style="width:28px;height:28px;border:3px solid #8b5cf6;border-top-color:transparent;border-radius:50%;animation:sp 1s linear infinite;margin:12px auto 0"></div>
+      </div>
+      <div id="waitScores" class="cd" style="text-align:left;display:none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MY TURN (record) -->
+<div id="p-rec" class="pg">
+  <div style="padding:14px 18px 6px;display:flex;align-items:center;gap:10px"><span id="recLabel" style="font-size:12px;color:#64748b;font-weight:600"></span></div>
+  <div style="padding:0 20px;text-align:center">
+    <div id="recHead" class="cd"></div>
+    <div id="recPhrase" class="cd" style="text-align:left"></div>
+    <div id="recTip" class="cd" style="text-align:left"></div>
+    <button class="bt" style="background:linear-gradient(135deg,#f59e0b,#d97706)" id="bListen">🔊 Listen to Character Voice</button>
+    <p style="font-size:8px;color:#475569;margin:4px 0 6px">AI voice approximation</p>
+    <div style="margin:8px 0"><canvas id="wav" class="wav" width="320" height="70"></canvas></div>
+    <div id="recTimer" style="display:none;margin-bottom:8px"><span id="timerV" style="font-size:24px;font-weight:900;color:#ec4899">0.0s</span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;margin-left:6px;animation:pu 1s infinite"></span></div>
+    <div id="recAnalyze" style="display:none" class="cd"></div>
+    <div id="recMicErr" style="display:none"></div>
+    <div id="recCD" style="display:none;font-size:60px;font-weight:900;margin:16px 0"></div>
+    <button class="bt" style="background:linear-gradient(135deg,#ec4899,#db2777)" id="bRec">🎤 Record My Impression</button>
+    <button class="bt" style="background:linear-gradient(135deg,#ef4444,#dc2626);display:none" id="bStop">⏹ Stop & Analyze</button>
+  </div>
+</div>
+
+<!-- RESULTS -->
+<div id="p-res" class="pg"><div id="resBody" style="padding:20px;text-align:center"></div></div>
+
+<!-- ROUND SUMMARY -->
+<div id="p-rsum" class="pg"><div id="rsumBody" style="padding:20px;text-align:center"></div></div>
+
+<!-- FINAL -->
+<div id="p-fin" class="pg"><div id="finBody" style="padding:20px;text-align:center"></div></div>
+
+<!-- SOLO CHARS -->
+<div id="p-chars" class="pg">
+  <div style="padding:14px 18px 6px;display:flex;align-items:center;gap:10px"><button class="bk" id="bCharsBk">←</button><h2 style="font-size:17px;font-weight:800">Choose Character</h2></div>
+  <div id="charGrid" style="padding:8px 18px;display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+</div>
+
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded",function(){
+
+/* ═══ CHARACTERS ═══ */
+var CH=[
+{id:1,n:"Professor Snape",a:"Alan Rickman",m:"Harry Potter",e:"🧙‍♂️",d:"Hard",c:"#6c5ce7",t:"VERY slow. Deep cold monotone. Dramatic pauses.",
+ vd:"Alan Rickman's Snape: extremely slow drawling delivery 60-80 WPM, low-mid pitch ~120Hz, almost monotone, long dramatic pauses 35%+ silence, cold and quiet, each word stretched and savored",sp:{p:.4,r:.55}},
+{id:2,n:"Gollum",a:"Andy Serkis",m:"Lord of the Rings",e:"💍",d:"Medium",c:"#00b894",t:"HIGH raspy! Switch sweet/angry. Preciousss!",
+ vd:"Andy Serkis' Gollum: high-pitched raspy 300-400Hz, wild pitch swings sweet to aggressive, sibilant S sounds, erratic pace, breathy raspy texture",sp:{p:1.8,r:1.3}},
+{id:3,n:"Darth Vader",a:"James Earl Jones",m:"Star Wars",e:"⚔️",d:"Easy",c:"#e74c3c",t:"DEEPEST voice. Very slow. Heavy breathing.",
+ vd:"James Earl Jones' Vader: deepest voice in cinema ~85Hz, very slow 50-70 WPM, mechanical breathing between phrases, steady authoritative, zero expressiveness",sp:{p:.1,r:.45}},
+{id:4,n:"Jack Sparrow",a:"Johnny Depp",m:"Pirates",e:"🏴‍☠️",d:"Hard",c:"#f39c12",t:"Slightly drunk. Theatrical. Unpredictable rhythm.",
+ vd:"Johnny Depp's Sparrow: medium pitch that wanders, slurred delivery as if drunk, theatrical, erratic pace, rising intonation at unexpected places",sp:{p:1.1,r:1.1}},
+{id:5,n:"Yoda",a:"Frank Oz",m:"Star Wars",e:"🟢",d:"Medium",c:"#2ecc71",t:"Elderly croaky. Very slow. Invert sentences.",
+ vd:"Frank Oz's Yoda: elderly higher-pitched croaky voice 200-260Hz, very slow 55-85 WPM, gentle but firm, inverted syntax, slight tremor, wise and warm",sp:{p:1.3,r:.55}},
+{id:6,n:"The Joker",a:"Heath Ledger",m:"The Dark Knight",e:"🃏",d:"Hard",c:"#9b59b6",t:"Calm then MANIC. Nasally. Random pitch!",
+ vd:"Heath Ledger's Joker: chaotic pitch jumping wildly low to high, nasally, lip-smacking, pace swings calm to manic, maximum variance, pure vocal chaos",sp:{p:1.2,r:1.4}},
+{id:7,n:"Gandalf",a:"Ian McKellen",m:"Lord of the Rings",e:"🧙",d:"Medium",c:"#94a3b8",t:"Deep elderly. Quiet → BUILD to powerful!",
+ vd:"Ian McKellen's Gandalf: deep warm elderly voice ~135Hz that transforms to thundering authority, enormous dynamic range whisper to power, measured pace that builds",sp:{p:.5,r:.65}},
+{id:8,n:"Shrek",a:"Mike Myers",m:"Shrek",e:"🧅",d:"Easy",c:"#6ab04c",t:"Scottish accent! Grumpy but lovable.",
+ vd:"Mike Myers' Shrek: Scottish accent medium-deep gruff ~140Hz, relaxed moderate pace, rounded vowels, blunt phrasing, grumpy surface warm underneath",sp:{p:.7,r:.85}},
+{id:9,n:"Batman",a:"Christian Bale",m:"The Dark Knight",e:"🦇",d:"Easy",c:"#636e72",t:"DEEPEST GRAVELLIEST. Gargling rocks.",
+ vd:"Christian Bale's Batman: extremely deep forced-gravelly ~85Hz, strained throat quality, short punchy intense phrases, aggressive brooding growl",sp:{p:.15,r:.6}},
+{id:10,n:"Dobby",a:"Toby Jones",m:"Harry Potter",e:"🧦",d:"Medium",c:"#fdcb6e",t:"HIGH squeaky! Fast, eager, emotional!",
+ vd:"Toby Jones' Dobby: very high squeaky 300-400Hz, fast eager delivery words tumbling, extremely emotional, speaks third person, quivers with feeling",sp:{p:1.9,r:1.5}},
+{id:11,n:"Thanos",a:"Josh Brolin",m:"Avengers",e:"🟣",d:"Medium",c:"#a29bfe",t:"Deep philosophical. Very calm. Soothing evil.",
+ vd:"Josh Brolin's Thanos: deep baritone ~110Hz, very slow calm 55-80 WPM, absolute certainty, almost soothing, never raises voice, quiet menace",sp:{p:.35,r:.5}},
+{id:12,n:"Groot",a:"Vin Diesel",m:"Guardians",e:"🌳",d:"Easy",c:"#e17055",t:"Deep warm rumble. 'I am Groot' with EMOTION!",
+ vd:"Vin Diesel's Groot: deep warm rumbling ~100Hz, very slow gentle, only says 'I am Groot' with enormous emotional range through tone alone",sp:{p:.3,r:.35}},
+{id:13,n:"Bane",a:"Tom Hardy",m:"Dark Knight Rises",e:"🎭",d:"Hard",c:"#2d3436",t:"Muffled theatrical. High for a villain. Grandiose.",
+ vd:"Tom Hardy's Bane: unusual high-mid pitch ~200Hz, theatrical grandiose speeches, muffled quality but precise, measured deliberate, lilting",sp:{p:.8,r:.75}},
+{id:14,n:"Optimus Prime",a:"Peter Cullen",m:"Transformers",e:"🤖",d:"Medium",c:"#3498db",t:"Deep heroic baritone. Noble. Inspiring leader.",
+ vd:"Peter Cullen's Optimus: deep heroic baritone ~120Hz, noble inspiring delivery, measured steady with dramatic emphasis, warm authoritative",sp:{p:.5,r:.7}},
+{id:15,n:"Genie",a:"Robin Williams",m:"Aladdin",e:"🧞",d:"Hard",c:"#00cec9",t:"FAST manic! Switch voices rapidly. Maximum energy!",
+ vd:"Robin Williams' Genie: incredibly fast manic delivery jumping between voices, extremely high energy, pitch ranges wildly, zero pauses, 200+ WPM",sp:{p:1.2,r:1.6}},
+{id:16,n:"Forrest Gump",a:"Tom Hanks",m:"Forrest Gump",e:"🏃",d:"Medium",c:"#fd79a8",t:"Southern accent. Slow, sincere, innocent, earnest.",
+ vd:"Tom Hanks' Forrest: medium pitch Southern Alabama accent, slow sincere delivery, innocent earnest quality, gentle warm, simple straightforward",sp:{p:.8,r:.7}},
+{id:17,n:"Mufasa",a:"James Earl Jones",m:"The Lion King",e:"🦁",d:"Easy",c:"#f9ca24",t:"Deep warm fatherly. Wise and loving.",
+ vd:"James Earl Jones' Mufasa: same deep bass as Vader but WARM and FATHERLY, ~90Hz, slow wise loving delivery, gentle strength, tender",sp:{p:.2,r:.6}},
+{id:18,n:"Scar",a:"Jeremy Irons",m:"The Lion King",e:"🦁",d:"Hard",c:"#6c5ce7",t:"Silky villainous purr. Dripping sarcasm. Elegant.",
+ vd:"Jeremy Irons' Scar: silky smooth baritone dripping sarcasm ~140Hz, elegant slow delivery, theatrical, venomous undertone, the voice purrs with malice",sp:{p:.55,r:.7}},
+{id:19,n:"Hermione",a:"Emma Watson",m:"Harry Potter",e:"📚",d:"Medium",c:"#e17055",t:"Precise British! Fast when correcting. Bossy but caring.",
+ vd:"Emma Watson's Hermione: clear precise British accent, speeds up when excited or correcting, bossy know-it-all with caring, emphasis on pronunciation",sp:{p:1.3,r:1.1}},
+{id:20,n:"The Godfather",a:"Marlon Brando",m:"The Godfather",e:"🎩",d:"Hard",c:"#2d3436",t:"Raspy whispery mumble. VERY quiet. Stuffed cheeks.",
+ vd:"Marlon Brando's Don Corleone: quiet raspy whisper, extremely low volume, slow with very long pauses, stuffed cheeks muffling, maximum authority through whisper",sp:{p:.4,r:.5}},
+{id:21,n:"Buzz Lightyear",a:"Tim Allen",m:"Toy Story",e:"🚀",d:"Easy",c:"#0984e3",t:"Heroic announcer voice! Bold confident. 'To infinity!'",
+ vd:"Tim Allen's Buzz: heroic medium-deep announcer voice ~150Hz, bold confident delivery, clear articulation, moderate pace with heroic emphasis",sp:{p:.6,r:.8}},
+{id:22,n:"Stitch",a:"Chris Sanders",m:"Lilo & Stitch",e:"👽",d:"Medium",c:"#e056fd",t:"Raspy alien! High energy. Mix gibberish and words!",
+ vd:"Chris Sanders' Stitch: high-pitched raspy alien 350-500Hz, very high energy chaotic, mixes gibberish with words, fast erratic, scratchy adorable",sp:{p:1.7,r:1.4}},
+{id:23,n:"Jar Jar Binks",a:"Ahmed Best",m:"Star Wars",e:"🐸",d:"Medium",c:"#a29bfe",t:"High goofy! Caribbean accent. 'Meesa Jar Jar!'",
+ vd:"Ahmed Best's Jar Jar: high goofy voice Caribbean accent ~300Hz, clumsy animated speech, fast stumbling, unique syntax meesa/yousa, very expressive",sp:{p:1.5,r:1.2}},
+{id:24,n:"Saruman",a:"Christopher Lee",m:"Lord of the Rings",e:"👁️",d:"Medium",c:"#636e72",t:"Deep commanding aristocratic. Cold authority. Precise.",
+ vd:"Christopher Lee's Saruman: deep aristocratic baritone ~110Hz, precise formal pronunciation, cold commanding, slow deliberate, dark and ominous",sp:{p:.4,r:.6}},
+{id:25,n:"Scarlett O'Hara",a:"Vivien Leigh",m:"Gone with the Wind",e:"👗",d:"Hard",c:"#ff7979",t:"Southern belle! Dramatic, passionate, higher pitch.",
+ vd:"Vivien Leigh's Scarlett: higher-pitched Southern belle, dramatic passionate, flirtatious then fierce, expressive emotional, Southern drawl",sp:{p:1.4,r:1.0}},
+];
+
+var PH={1:["Turn to page 394.","Obviously.","You have your mother's eyes.","Always."],
+2:["My precious!","We wants it, we needs it.","Stupid fat hobbit!","Leave now and never come back!"],
+3:["I am your father.","I find your lack of faith disturbing.","The Force is strong with this one."],
+4:["Why is the rum always gone?","I'm Captain Jack Sparrow!","Savvy?"],
+5:["Do or do not, there is no try.","Judge me by my size, do you?"],
+6:["Why so serious?","Let's put a smile on that face.","And here we go!"],
+7:["You shall not pass!","A wizard is never late.","Fly, you fools!"],
+8:["What are you doing in my swamp?!","Ogres are like onions."],
+9:["I'm Batman.","Swear to me!"],
+10:["Dobby is free!","Dobby has no master!"],
+11:["I am inevitable.","Perfectly balanced, as all things should be."],
+12:["I am Groot.","I am Groot!","I... am... Groot."],
+13:["You merely adopted the dark. I was born in it.","When Gotham is ashes, you have my permission to die."],
+14:["Autobots, roll out!","Freedom is the right of all sentient beings."],
+15:["You ain't never had a friend like me!","Phenomenal cosmic powers! Itty bitty living space."],
+16:["Life is like a box of chocolates.","Run, Forrest, run!"],
+17:["Remember who you are.","Everything the light touches is our kingdom."],
+18:["Be prepared!","I'm surrounded by idiots.","Long live the king."],
+19:["It's LeviOsa, not LeviosA!","Honestly, don't you two read?"],
+20:["I'm gonna make him an offer he can't refuse."],
+21:["To infinity and beyond!","You are a toy!"],
+22:["Ohana means family.","Meega nala kweesta!"],
+23:["Meesa Jar Jar Binks!","How rude!"],
+24:["Against the power of Mordor there can be no victory."],
+25:["Frankly, my dear, I don't give a damn.","Tomorrow is another day!"]};
+
+/* ═══ STATE ═══ */
+var G={name:"",isHost:false,code:"",players:[],scores:{},round:0,rounds:[],
+  turnIdx:0,turnScores:[],myScore:null,char:null,phrase:"",TOTAL_ROUNDS:4};
+var peer=null,conns=[],hostConn=null;
+var MR,STM,ACX,ANA,DA=[],RTI,WAF,COL,rtVal=0;
+
+/* ═══ HELPERS ═══ */
+function $(i){return document.getElementById(i);}
+function go(i){document.querySelectorAll('.pg').forEach(function(p){p.classList.remove('on');});$(i).classList.add('on');}
+function pk(a){return a[Math.floor(Math.random()*a.length)];}
+function cl(v,lo,hi){return Math.min(hi,Math.max(lo,Math.round(v)));}
+function gc(){return Math.random().toString(36).substring(2,6).toUpperCase();}
+function nm(){var n=$('iName').value.trim();if(!n){$('nErr').textContent='Enter your name!';$('nErr').style.display='block';return false;}G.name=n;$('nErr').style.display='none';return true;}
+function speakAs(id,txt,onEnd){if(!window.speechSynthesis){if(onEnd)onEnd();return;}window.speechSynthesis.cancel();var c=CH.find(function(x){return x.id===id;});var pr=c?c.sp:{p:1,r:1};var u=new SpeechSynthesisUtterance(txt);u.pitch=pr.p;u.rate=pr.r;u.volume=1;var vs=window.speechSynthesis.getVoices();var ev=vs.find(function(v){return v.lang.indexOf('en')===0;})||vs[0];if(ev)u.voice=ev;u.onend=function(){if(onEnd)onEnd();};u.onerror=function(){if(onEnd)onEnd();};window.speechSynthesis.speak(u);}
+function aN(el,val){var t0=Date.now();(function t(){var p=Math.min(1,(Date.now()-t0)/1200);el.textContent=Math.round((1-Math.pow(1-p,3))*val);if(p<1)requestAnimationFrame(t);})();}
+
+/* ═══ PEERJS CONFIG (global) ═══ */
+var PEER_CONFIG = {
+  debug: 1,
+  host: '0.peerjs.com',
+  port: 443,
+  secure: true,
+  path: '/',
+  config: {
+    iceServers: [
+      {urls: 'stun:stun.l.google.com:19302'},
+      {urls: 'stun:stun1.l.google.com:19302'},
+      {urls: 'stun:stun2.l.google.com:19302'},
+      {urls: 'stun:global.stun.twilio.com:3478'},
+      {urls: 'stun:stun.relay.metered.ca:80'},
+      {urls: 'turn:global.relay.metered.ca:80', username:'dc2e3db26b91c3b36c04db0a',credential:'dstNBjMRETpLxLSt'},
+      {urls: 'turn:global.relay.metered.ca:443', username:'dc2e3db26b91c3b36c04db0a',credential:'dstNBjMRETpLxLSt'},
+      {urls: 'turn:global.relay.metered.ca:443?transport=tcp', username:'dc2e3db26b91c3b36c04db0a',credential:'dstNBjMRETpLxLSt'}
+    ]
+  }
+};
+function addLog(msg){
+  var el=$('lobStatus');if(el)el.innerHTML='<span style="color:#a78bfa;font-size:10px">'+msg+'</span>';
+  var el2=$('joinStatus');if(el2&&el2.style.display!=='none')el2.innerHTML='<span style="color:#a78bfa;font-size:10px">'+msg+'</span>';
+  console.log('[VM]',msg);
+}
+
+/* ═══ PEERJS MULTIPLAYER ═══ */
+function createRoom(){
+  if(!nm())return;
+
+  /* Protocol check */
+  if(location.protocol==='file:'){
+    $('nErr').innerHTML='⚠️ Multiplayer needs a website! Upload this file to <a href="https://tiiny.host" target="_blank" style="color:#8b5cf6">tiiny.host</a> first.';
+    $('nErr').style.display='block';return;
+  }
+
+  G.isHost=true;G.code=gc();G.players=[G.name];G.scores={};G.round=0;G.turnScores=[];
+  var prefix='vm-'+G.code.toLowerCase();
+  if(peer)peer.destroy();
+
+  peer=new Peer(prefix, PEER_CONFIG);
+  peer.on('open',function(id){
+    addLog('✅ Room ready! ID: '+id+' | Waiting for players...');
+    console.log('[VM] HOST: Peer registered as',id);
+    renderLobby();go('p-lobby');
+    /* Keep connection alive by checking periodically */
+    setInterval(function(){
+      if(peer&&peer.disconnected){addLog('⚠️ Reconnecting...');try{peer.reconnect();}catch(e){}}
+    },15000);
+  });
+  peer.on('connection',function(conn){
+    console.log('[VM] HOST: New connection from',conn.metadata?.name||'unknown');
+    addLog('🔗 New player connecting...');
+    conn.on('open',function(){
+      console.log('[VM] HOST: Connection opened with',conn.metadata?.name);
+    });
+    conn.on('data',function(d){hostHandle(conn,d);});
+    conn.on('close',function(){
+      conns=conns.filter(function(c){return c!==conn;});
+      if(conn.metadata&&conn.metadata.name){G.players=G.players.filter(function(p){return p!==conn.metadata.name;});}
+      broadcastLobby();renderLobby();addLog('👋 Player disconnected');
+    });
+    conns.push(conn);
+  });
+  peer.on('error',function(e){
+    console.log('[VM] HOST error:',e.type,e);
+    if(e.type==='unavailable-id'){G.code=gc();createRoom();return;}
+    addLog('⚠️ Error: '+e.type);
+    $('nErr').textContent='Connection error: '+e.type;$('nErr').style.display='block';
+  });
+  peer.on('disconnected',function(){
+    addLog('⚠️ Disconnected from server, reconnecting...');
+    console.log('[VM] HOST: Disconnected, attempting reconnect');
+    try{peer.reconnect();}catch(e){console.log('[VM] Reconnect failed:',e);}
+  });
+}
+
+function joinRoom(){
+  var code=$('iJoinCode').value.trim().toUpperCase();
+  if(!code||code.length<3){$('joinErr').textContent='Enter a valid code!';$('joinErr').style.display='block';return;}
+  if(!nm())return;
+
+  if(location.protocol==='file:'){
+    $('joinErr').innerHTML='⚠️ <b>Cannot connect from a local file!</b><br>Upload to <a href="https://tiiny.host" target="_blank" style="color:#8b5cf6">tiiny.host</a> first.';
+    $('joinErr').style.display='block';return;
+  }
+
+  G.isHost=false;G.code=code;
+  $('joinErr').style.display='none';
+  var prefix='vm-'+code.toLowerCase();
+  var attempt=0;var maxAttempts=3;
+
+  function tryConnect(){
+    attempt++;
+    $('joinStatus').innerHTML='<div style="width:20px;height:20px;border:2px solid #8b5cf6;border-top-color:transparent;border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px"></div>Connecting... (attempt '+attempt+'/'+maxAttempts+')';
+    $('joinStatus').style.display='block';
+
+    if(peer)try{peer.destroy();}catch(e){}
+    peer=new Peer(undefined, PEER_CONFIG);
+
+    var connected=false;
+    var timeout=setTimeout(function(){
+      if(!connected){
+        console.log('[VM] Attempt '+attempt+' timed out');
+        try{peer.destroy();}catch(e){}
+        if(attempt<maxAttempts){
+          $('joinStatus').innerHTML='<span style="color:#fbbf24;font-size:11px">⏳ Retrying in 2 seconds... ('+attempt+'/'+maxAttempts+')</span>';
+          setTimeout(tryConnect,2000);
+        }else{
+          $('joinStatus').style.display='none';
+          $('joinErr').innerHTML='❌ Could not find room "<b>'+code+'</b>" after '+maxAttempts+' attempts.<br><span style="font-size:10px;color:#94a3b8">Make sure:<br>• The host still has the room open<br>• Both of you use the SAME link ('+location.origin+')<br>• The code is typed correctly</span>';
+          $('joinErr').style.display='block';
+        }
+      }
+    },8000);
+
+    peer.on('open',function(myId){
+      console.log('[VM] Attempt '+attempt+': My peer ID:',myId,'. Looking for:',prefix);
+      $('joinStatus').innerHTML='<div style="width:20px;height:20px;border:2px solid #22c55e;border-top-color:transparent;border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px"></div>Connected to server! Looking for room '+code+'...';
+
+      setTimeout(function(){
+        hostConn=peer.connect(prefix,{metadata:{name:G.name},reliable:true,serialization:'json'});
+        if(!hostConn){
+          if(attempt<maxAttempts){setTimeout(tryConnect,2000);}
+          return;
+        }
+        hostConn.on('open',function(){
+          connected=true;clearTimeout(timeout);
+          console.log('[VM] Connected to host!');
+          hostConn.send({type:'join',name:G.name});
+          $('joinStatus').innerHTML='<span class="dot" style="background:#22c55e"></span> Connected! Joining lobby...';
+        });
+        hostConn.on('data',function(d){guestHandle(d);});
+        hostConn.on('close',function(){alert('Host disconnected');go('p-home');});
+        hostConn.on('error',function(err){
+          console.log('[VM] Conn error:',err);
+          if(!connected&&attempt<maxAttempts){clearTimeout(timeout);setTimeout(tryConnect,2000);}
+        });
+      },500);
+    });
+
+    peer.on('error',function(e){
+      console.log('[VM] Peer error attempt '+attempt+':',e.type);
+      if(e.type==='peer-unavailable'&&!connected){
+        clearTimeout(timeout);
+        if(attempt<maxAttempts){
+          $('joinStatus').innerHTML='<span style="color:#fbbf24;font-size:11px">⏳ Room not found yet, retrying... ('+attempt+'/'+maxAttempts+')</span>';
+          setTimeout(tryConnect,2000);
+        }else{
+          $('joinStatus').style.display='none';
+          $('joinErr').innerHTML='❌ Room "<b>'+code+'</b>" not found!<br><span style="font-size:10px;color:#94a3b8">The host needs to keep the room page open.<br>Make sure you\'re both on: '+location.origin+'</span>';
+          $('joinErr').style.display='block';
+        }
+      }else if(!connected){
+        clearTimeout(timeout);
+        $('joinStatus').style.display='none';
+        $('joinErr').innerHTML='Error: '+e.type;$('joinErr').style.display='block';
+      }
+    });
+  }
+
+  tryConnect();
+}
+
+/* HOST: handle messages from guests */
+function hostHandle(conn,msg){
+  if(msg.type==='join'){
+    conn.metadata={name:msg.name};
+    if(G.players.indexOf(msg.name)<0)G.players.push(msg.name);
+    broadcastLobby();renderLobby();
+  }
+  if(msg.type==='score'){
+    G.turnScores.push({player:msg.name,score:msg.score,round:G.round});
+    if(!G.scores[msg.name])G.scores[msg.name]=0;
+    G.scores[msg.name]+=msg.score;
+    // Check if all players scored this round
+    var roundScores=G.turnScores.filter(function(s){return s.round===G.round;});
+    if(roundScores.length>=G.players.length){
+      broadcast({type:'round_end',turnScores:G.turnScores,scores:G.scores,round:G.round});
+      showRoundSummary();
+    }else{
+      // Next player's turn
+      var nextIdx=roundScores.length;
+      broadcast({type:'turn',round:G.round,charId:G.char.id,phrase:G.phrase,turnPlayer:G.players[nextIdx],turnIdx:nextIdx,turnScores:G.turnScores,scores:G.scores});
+      handleMyTurn(G.players[nextIdx]);
+    }
+  }
+}
+
+function broadcastLobby(){broadcast({type:'lobby',players:G.players,code:G.code});}
+function broadcast(msg){conns.forEach(function(c){try{c.send(msg);}catch(e){}});}
+
+/* GUEST: handle messages from host */
+function guestHandle(msg){
+  if(msg.type==='lobby'){
+    G.players=msg.players;G.code=msg.code;renderLobby();go('p-lobby');
+  }
+  if(msg.type==='turn'){
+    G.round=msg.round;G.char=CH.find(function(c){return c.id===msg.charId;});G.phrase=msg.phrase;
+    G.turnIdx=msg.turnIdx;G.turnScores=msg.turnScores||[];G.scores=msg.scores||{};
+    handleMyTurn(msg.turnPlayer);
+  }
+  if(msg.type==='round_end'){
+    G.turnScores=msg.turnScores;G.scores=msg.scores;G.round=msg.round;
+    showRoundSummary();
+  }
+  if(msg.type==='game_end'){
+    G.scores=msg.scores;showFinal();
+  }
+  if(msg.type==='next_round'){
+    G.round=msg.round;G.char=CH.find(function(c){return c.id===msg.charId;});G.phrase=msg.phrase;
+    G.turnScores=msg.turnScores||[];
+    handleMyTurn(msg.turnPlayer);
+  }
+}
+
+/* ═══ GAME FLOW ═══ */
+function startGame(){
+  if(G.players.length<2)return;
+  G.rounds=CH.sort(function(){return Math.random()-.5;}).slice(0,G.TOTAL_ROUNDS);
+  G.round=0;G.scores={};G.turnScores=[];
+  G.char=G.rounds[0];G.phrase=pk(PH[G.char.id]);
+  broadcast({type:'turn',round:0,charId:G.char.id,phrase:G.phrase,turnPlayer:G.players[0],turnIdx:0,turnScores:[],scores:{}});
+  handleMyTurn(G.players[0]);
+}
+
+function handleMyTurn(turnPlayer){
+  if(turnPlayer===G.name){
+    // MY TURN - show record screen
+    showRecordScreen();go('p-rec');
+  }else{
+    // SOMEONE ELSE'S TURN - show waiting screen
+    showWaitScreen(turnPlayer);go('p-wait');
+  }
+}
+
+function nextRound(){
+  G.round++;
+  if(G.round>=G.TOTAL_ROUNDS){
+    broadcast({type:'game_end',scores:G.scores});
+    showFinal();return;
+  }
+  G.char=G.rounds[G.round];G.phrase=pk(PH[G.char.id]);
+  broadcast({type:'next_round',round:G.round,charId:G.char.id,phrase:G.phrase,turnPlayer:G.players[0],turnScores:G.turnScores});
+  handleMyTurn(G.players[0]);
+}
+
+function submitScore(score){
+  // Add my score locally
+  G.turnScores.push({player:G.name,score:score,round:G.round});
+  if(!G.scores[G.name])G.scores[G.name]=0;
+  G.scores[G.name]+=score;
+
+  if(G.isHost){
+    var roundScores=G.turnScores.filter(function(s){return s.round===G.round;});
+    if(roundScores.length>=G.players.length){
+      broadcast({type:'round_end',turnScores:G.turnScores,scores:G.scores,round:G.round});
+      showRoundSummary();
+    }else{
+      var nextIdx=roundScores.length;
+      broadcast({type:'turn',round:G.round,charId:G.char.id,phrase:G.phrase,turnPlayer:G.players[nextIdx],turnIdx:nextIdx,turnScores:G.turnScores,scores:G.scores});
+      handleMyTurn(G.players[nextIdx]);
+    }
+  }else{
+    hostConn.send({type:'score',name:G.name,score:score,round:G.round});
+    // Show waiting for others
+    showWaitScreen("others to finish");go('p-wait');
+  }
+}
+
+/* ═══ UI RENDERS ═══ */
+function renderLobby(){
+  $('lobCode').textContent=G.code;
+  $('lobStatus').innerHTML='<span class="dot '+(conns.length||!G.isHost?'':'pulse-dot')+'" style="background:#22c55e"></span> <span style="color:#22c55e;font-size:11px">Connected · '+(G.isHost?'You are the Host':'You joined as Guest')+'</span>';
+  $('lobPlayers').innerHTML='<div class="lb" style="margin-bottom:8px">Players ('+G.players.length+')</div>'+G.players.map(function(p,i){
+    return '<div class="rw"><div class="av" style="background:hsl('+(i*55+200)+',55%,50%)">'+p[0]+'</div><div style="flex:1"><div style="font-weight:700;font-size:12px">'+p+(p===G.name?' (You)':'')+'</div><div style="font-size:8px;color:'+(i===0?'#ec4899':'#22c55e')+'">'+(i===0?'👑 Host':'✓ Connected')+'</div></div></div>';
+  }).join('');
+  if(G.isHost){
+    $('bStart').disabled=G.players.length<2;$('bStart').style.display='block';$('lobGuest').style.display='none';
+    $('bStart').textContent='🚀 Start Game! ('+G.players.length+' players)';
+  }else{
+    $('bStart').style.display='none';$('lobGuest').style.display='block';
+  }
+}
+
+function showWaitScreen(turnPlayer){
+  $('waitRound').textContent='Round '+(G.round+1)+'/'+G.TOTAL_ROUNDS;
+  $('waitEmoji').textContent=G.char.e;$('waitChar').textContent=G.char.n;$('waitChar').style.color=G.char.c;
+  $('waitMsg').textContent='🎤 '+turnPlayer+"'s turn...";
+  var rs=G.turnScores.filter(function(s){return s.round===G.round;});
+  if(rs.length>0){$('waitScores').style.display='block';$('waitScores').innerHTML='<div class="lb" style="margin-bottom:6px">Scores this round</div>'+rs.map(function(s){return '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px"><span style="color:#94a3b8">'+s.player+'</span><span style="font-weight:700;color:#fbbf24">'+s.score+'</span></div>';}).join('');}
+  else{$('waitScores').style.display='none';}
+}
+
+function showRecordScreen(){
+  var c=G.char;
+  $('recLabel').textContent='Round '+(G.round+1)+'/'+G.TOTAL_ROUNDS+' · Your turn!';
+  $('recHead').innerHTML='<div style="text-align:center;background:linear-gradient(135deg,'+c.c+'12,transparent);border-radius:14px;padding:12px;border:1px solid '+c.c+'22"><div style="font-size:42px">'+c.e+'</div><h3 style="margin:2px 0;font-size:18px;font-weight:800;color:'+c.c+'">'+c.n+'</h3><p style="color:#64748b;font-size:9px">'+c.m+' · '+c.a+'</p></div>';
+  $('recPhrase').innerHTML='<div class="lb" style="margin-bottom:2px">Say this line</div><p style="font-size:15px;font-weight:700;line-height:1.4">"'+G.phrase+'"</p>';
+  $('recTip').innerHTML='<div class="lb" style="margin-bottom:2px">💡 Tip</div><p style="font-size:10px;color:#94a3b8;line-height:1.4">'+c.t+'</p>';
+  $('recTimer').style.display='none';$('recAnalyze').style.display='none';$('recMicErr').style.display='none';$('recCD').style.display='none';
+  $('bRec').style.display='block';$('bStop').style.display='none';
+  var ctx=$('wav').getContext('2d');ctx.fillStyle='#080c16';ctx.fillRect(0,0,320,70);
+}
+
+function showRoundSummary(){
+  var rs=G.turnScores.filter(function(s){return s.round===G.round;}).sort(function(a,b){return b.score-a.score;});
+  var sorted=Object.entries(G.scores).sort(function(a,b){return b[1]-a[1];});
+  var h='<h2 style="font-size:18px;font-weight:800;margin:0 0 2px">Round '+(G.round+1)+' Complete!</h2>';
+  h+='<p style="color:#64748b;font-size:11px;margin-bottom:12px">'+G.char.e+' '+G.char.n+'</p>';
+  h+='<div class="cd">'+rs.map(function(s,i){return '<div class="rw"><div style="width:24px;height:24px;border-radius:50%;font-size:10px;font-weight:900;display:flex;align-items:center;justify-content:center;background:'+(i===0?'#fbbf24':i===1?'#94a3b8':'#78716c')+'">'+(i+1)+'</div><div style="flex:1;text-align:left"><span style="font-weight:700;font-size:12px;color:'+(s.player===G.name?'#ec4899':'#f1f5f9')+'">'+s.player+(s.player===G.name?' (You)':'')+'</span></div><span style="font-weight:800;font-size:16px;color:'+(i===0?'#fbbf24':'#94a3b8')+'">'+s.score+'</span></div>';}).join('')+'</div>';
+  h+='<div class="cd"><div class="lb" style="margin-bottom:4px">Overall Standings</div>'+sorted.map(function(e){return '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px"><span style="color:'+(e[0]===G.name?'#ec4899':'#94a3b8')+'">'+e[0]+'</span><span style="font-weight:700;color:#f1f5f9">'+e[1]+'</span></div>';}).join('')+'</div>';
+  if(G.isHost){h+='<button class="bt" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed)" onclick="nextRound()">'+(G.round+1>=G.TOTAL_ROUNDS?'🏆 Final Results':'Next Round →')+'</button>';}
+  else{h+='<p style="color:#a78bfa;font-size:12px;margin-top:12px">Waiting for host...</p>';}
+  $('rsumBody').innerHTML=h;go('p-rsum');
+}
+
+function showFinal(){
+  var sorted=Object.entries(G.scores).sort(function(a,b){return b[1]-a[1];});
+  var win=sorted[0][0]===G.name;var col=win?'#fbbf24':'#ec4899';
+  var h='<div style="font-size:50px">'+(win?'🏆':'🎉')+'</div>';
+  h+='<h2 style="font-size:20px;font-weight:900;margin:6px 0 2px;color:'+col+'">'+(win?'You Win!':sorted[0][0]+' Wins!')+'</h2>';
+  h+='<p style="color:#64748b;font-size:10px;margin-bottom:14px">After '+G.TOTAL_ROUNDS+' rounds</p>';
+  h+='<div class="cd">'+sorted.map(function(e,i){return '<div class="rw"><div style="font-size:17px">'+(i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1)+'</div><div style="flex:1;text-align:left"><span style="font-weight:700;font-size:13px;color:'+(e[0]===G.name?'#ec4899':'#f1f5f9')+'">'+e[0]+'</span></div><span style="font-weight:800;font-size:17px;color:'+(i===0?'#fbbf24':'#94a3b8')+'">'+e[1]+'</span></div>';}).join('')+'</div>';
+  h+='<button class="bt" style="background:rgba(255,255,255,.07)" onclick="go(\'p-home\')">🏠 Home</button>';
+  $('finBody').innerHTML=h;go('p-fin');
+}
+
+/* ═══ RECORDING & AI ═══ */
+function startRec(){
+  $('recMicErr').style.display='none';
+  navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}}).then(function(str){
+    STM=str;ACX=new(window.AudioContext||window.webkitAudioContext)();
+    var src=ACX.createMediaStreamSource(str);ANA=ACX.createAnalyser();ANA.fftSize=4096;ANA.smoothingTimeConstant=.3;src.connect(ANA);DA=[];
+    COL=setInterval(function(){var f=new Float32Array(ANA.frequencyBinCount);ANA.getFloatFrequencyData(f);var t=new Uint8Array(ANA.fftSize);ANA.getByteTimeDomainData(t);DA.push({f:Array.from(f),t:Array.from(t)});},80);
+    MR=new MediaRecorder(str);
+    MR.onstart=function(){rtVal=0;$('recTimer').style.display='block';$('bRec').style.display='none';$('bStop').style.display='block';RTI=setInterval(function(){rtVal+=.1;$('timerV').textContent=rtVal.toFixed(1)+'s';},100);drawWave();};
+    MR.onstop=function(){clearInterval(COL);clearInterval(RTI);cancelAnimationFrame(WAF);STM.getTracks().forEach(function(t){t.stop();});var feat=xF();ACX.close();analyze(feat);};
+    MR.start();setTimeout(function(){if(MR&&MR.state==='recording')MR.stop();},15000);
+  }).catch(function(e){$('recMicErr').innerHTML='<div class="cd" style="background:rgba(239,68,68,.1)"><p style="color:#fca5a5;font-size:11px">🎤 '+(e.message||'Mic blocked')+'</p></div>';$('recMicErr').style.display='block';});
+}
+
+function doRecCD(){
+  $('recCD').style.display='block';$('bRec').style.display='none';
+  var n=3;$('recCD').textContent=n;$('recCD').style.color='#22c55e';
+  var iv=setInterval(function(){n--;if(n>0){$('recCD').textContent=n;$('recCD').style.color=n<=1?'#ef4444':'#fbbf24';}else{clearInterval(iv);$('recCD').style.display='none';startRec();}},1000);
+}
+
+function drawWave(){if(!ANA)return;var cv=$('wav'),ctx=cv.getContext('2d'),buf=new Uint8Array(ANA.fftSize);(function lp(){WAF=requestAnimationFrame(lp);ANA.getByteTimeDomainData(buf);ctx.fillStyle='rgba(8,12,22,.4)';ctx.fillRect(0,0,cv.width,cv.height);ctx.lineWidth=2;ctx.strokeStyle='#ec4899';ctx.shadowBlur=5;ctx.shadowColor='#ec4899';ctx.beginPath();var sw=cv.width/buf.length;for(var i=0;i<buf.length;i++){var y=(buf[i]/128)*cv.height/2;i?ctx.lineTo(i*sw,y):ctx.moveTo(0,y);}ctx.stroke();ctx.shadowBlur=0;})();}
+
+function xF(){
+  if(!DA||DA.length<5)return null;
+  var rms=DA.map(function(fr){var s=0;for(var i=0;i<fr.t.length;i++){var v=(fr.t[i]-128)/128;s+=v*v;}return Math.sqrt(s/fr.t.length);});
+  var aR=rms.reduce(function(a,b){return a+b;},0)/rms.length;
+  var rV=rms.reduce(function(s,v){return s+Math.pow(v-aR,2);},0)/rms.length;
+  var cn=DA.map(function(fr){var n=0,d=0;for(var i=0;i<fr.f.length;i++){var m=Math.pow(10,fr.f[i]/20);n+=i*10.77*m;d+=m;}return d>0?n/d:0;});
+  var aC=cn.reduce(function(a,b){return a+b;},0)/cn.length;
+  var cV=cn.reduce(function(s,v){return s+Math.pow(v-aC,2);},0)/cn.length;
+  var jp=[];for(var i=1;i<cn.length;i++)jp.push(Math.abs(cn[i]-cn[i-1]));
+  var aJ=jp.length?jp.reduce(function(a,b){return a+b;},0)/jp.length:0;
+  var lh=DA.map(function(fr){var q=Math.floor(fr.f.length/4);var lo=fr.f.slice(0,q).reduce(function(a,b){return a+Math.pow(10,b/20);},0);var hi=fr.f.slice(q*3).reduce(function(a,b){return a+Math.pow(10,b/20);},0);return hi>0?lo/hi:50;});
+  var aL=lh.reduce(function(a,b){return a+b;},0)/lh.length;
+  var si=rms.filter(function(v){return v<.02;}).length;var pR=si/rms.length;
+  var pk2=0;for(var i=1;i<rms.length-1;i++)if(rms[i]>rms[i-1]&&rms[i]>rms[i+1]&&rms[i]>aR*.7)pk2++;
+  var wpm=rtVal>0?(pk2/rtVal)*30:0;var sl=rms.length>1?(rms[rms.length-1]-rms[0])/(rms.length-1):0;
+  return{aR:aR,rV:rV,aC:aC,cV:cV,aJ:aJ,aL:aL,pR:pR,wpm:Math.round(wpm),sl:sl,dur:rtVal,
+    dp:aL>4||aC<200,vD:aL>8||aC<150,hi:aL<1.5||aC>350,vH:aL<1||aC>450,
+    sw:wpm<80||pR>.3,fa:wpm>140,ld:aR>.25,qt:aR<.1,
+    ex:rV>.01||cV>5000,vE:rV>.02||cV>10000,mn:cV<1000&&rV<.003,
+    gr:aL>3&&aR>.15,er:aJ>100,pa:pR>.25};
+}
+
+/* AI SCORING */
+function analyze(f){
+  $('bStop').style.display='none';$('recTimer').style.display='none';
+  $('recAnalyze').innerHTML='<div style="text-align:center;padding:12px"><div style="width:28px;height:28px;border:3px solid #8b5cf6;border-top-color:transparent;border-radius:50%;animation:sp .8s linear infinite;margin:0 auto 8px"></div><p style="font-size:12px;font-weight:700;color:#a78bfa">🧠 AI analyzing your '+G.char.n+'...</p></div>';
+  $('recAnalyze').style.display='block';
+
+  // Try Anthropic API first
+  aiAnalyze(f).then(function(sc){
+    $('recAnalyze').style.display='none';
+    G.myScore=sc;showResult(sc);go('p-res');
+  });
+}
+
+function aiAnalyze(f){
+  return fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,
+      messages:[{role:"user",content:"You are the world's top voice impression judge. Score this impression.\n\nCHARACTER: "+G.char.n+" ("+G.char.a+" in "+G.char.m+")\nVOICE PROFILE: "+G.char.vd+"\nPHRASE: \""+G.phrase+"\"\nDURATION: "+f.dur.toFixed(1)+"s\n\nAUDIO FEATURES:\n- Spectral centroid: "+f.aC.toFixed(0)+"Hz ("+(f.vD?"very deep":f.dp?"deep":f.vH?"very high":f.hi?"high":"medium")+")\n- Low/High ratio: "+f.aL.toFixed(1)+" ("+(f.aL>6?"very bass-heavy":f.aL>3?"bass-heavy":f.aL<1.5?"treble-heavy":"balanced")+")\n- Energy: "+f.aR.toFixed(3)+" ("+(f.qt?"very quiet":f.ld?"loud":"moderate")+")\n- Variance: "+f.rV.toFixed(4)+" ("+(f.mn?"monotone":f.vE?"very expressive":f.ex?"expressive":"steady")+")\n- Pitch jumps: "+f.aJ.toFixed(0)+" ("+(f.er?"erratic":"stable")+")\n- Pause ratio: "+(f.pR*100).toFixed(0)+"%\n- Est. pace: ~"+f.wpm+" WPM ("+(f.sw?"slow":f.fa?"fast":"moderate")+")\n- Gravelly: "+(f.gr?"yes":"no")+"\n\nBe fair (40-75 typical, 85+ exceptional). Respond ONLY JSON (no markdown):\n{\"total\":<1-100>,\"pitch\":<1-100>,\"tone\":<1-100>,\"timing\":<1-100>,\"expression\":<1-100>,\"feedback\":\"<2 sentences>\",\"reaction\":\"<funny in-character quote>\"}"}]})
+  }).then(function(r){return r.json();}).then(function(d){
+    var txt=d.content.map(function(c){return c.text||"";}).join("");
+    return JSON.parse(txt.replace(/```json|```/g,"").trim());
+  }).catch(function(){return localScore(f);});
+}
+
+function localScore(f){
+  if(!f||f.dur<.5)return{total:15,pitch:15,tone:15,timing:15,expression:15,feedback:"Too short!",reaction:""};
+  var base=40+Math.random()*30;
+  if(f.dp&&(G.char.id===3||G.char.id===9||G.char.id===17))base+=15;
+  if(f.hi&&(G.char.id===2||G.char.id===10))base+=15;
+  if(f.sw&&(G.char.id===1||G.char.id===3||G.char.id===11))base+=10;
+  if(f.ex&&(G.char.id===6||G.char.id===15))base+=12;
+  var t=cl(base,15,95);return{total:t,pitch:cl(t+Math.random()*16-8,5,98),tone:cl(t+Math.random()*16-8,5,98),timing:cl(t+Math.random()*16-8,5,98),expression:cl(t+Math.random()*16-8,5,98),feedback:"Score: "+t+"/100. Keep practicing!",reaction:""};
+}
+
+function showResult(sc){
+  var g=sc.total>=90?{g:"S+",c:"#ffd700",t:"LEGENDARY!"}:sc.total>=78?{g:"A",c:"#22c55e",t:"Amazing!"}:sc.total>=62?{g:"B",c:"#3b82f6",t:"Great!"}:sc.total>=45?{g:"C",c:"#fbbf24",t:"Not Bad!"}:sc.total>=28?{g:"D",c:"#f97316",t:"Keep Trying!"}:{g:"F",c:"#ef4444",t:"Try Again!"};
+  var h='<div style="font-size:58px;font-weight:900;color:'+g.c+';text-shadow:0 0 30px '+g.c+'55;line-height:1">'+g.g+'</div>';
+  h+='<p style="font-size:15px;font-weight:700;color:'+g.c+';margin:4px 0">'+g.t+'</p>';
+  h+='<p style="color:#64748b;font-size:10px">'+G.char.e+' '+G.char.n+'</p>';
+  h+='<div class="cd" style="margin-top:10px"><span id="sNum" style="font-size:40px;font-weight:900;color:'+g.c+'">0</span><span style="font-size:14px;color:#475569">/100</span></div>';
+  h+='<div class="cd" style="text-align:left">';
+  [{l:"🎵 Pitch",v:sc.pitch,c:"#8b5cf6"},{l:"🎭 Tone",v:sc.tone,c:"#ec4899"},{l:"⏱ Timing",v:sc.timing,c:"#06b6d4"},{l:"✨ Expression",v:sc.expression,c:"#f59e0b"}].forEach(function(b,i){
+    h+='<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:2px"><span>'+b.l+'</span><span style="font-weight:700;color:'+b.c+'">'+b.v+'%</span></div><div class="bar-t"><div class="bar-f" id="b'+i+'" style="background:'+b.c+';box-shadow:0 0 8px '+b.c+'44"></div></div></div>';
+  });
+  h+='</div>';
+  if(sc.feedback){h+='<div class="cd" style="text-align:left;background:rgba(139,92,246,.06)"><div class="lb" style="margin-bottom:3px">🧠 AI Coach</div><p style="font-size:11px;color:#e2e8f0;line-height:1.4;margin:0">'+sc.feedback+'</p></div>';}
+  if(sc.reaction){h+='<div class="cd" style="text-align:left;background:'+G.char.c+'10"><div class="lb" style="margin-bottom:2px">'+G.char.e+' says:</div><p style="font-size:12px;color:'+G.char.c+';font-style:italic;margin:0">"'+sc.reaction+'"</p></div>';}
+  h+='<button class="bt" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed)" onclick="submitScore('+sc.total+')">Continue →</button>';
+  $('resBody').innerHTML=h;
+  setTimeout(function(){aN($('sNum'),sc.total);},200);
+  setTimeout(function(){$('b0').style.width=sc.pitch+'%';},300);
+  setTimeout(function(){$('b1').style.width=sc.tone+'%';},450);
+  setTimeout(function(){$('b2').style.width=sc.timing+'%';},600);
+  setTimeout(function(){$('b3').style.width=sc.expression+'%';},750);
+}
+
+/* ═══ SOLO MODE ═══ */
+function goSolo(){
+  if(!nm())return;
+  $('charGrid').innerHTML=CH.map(function(c){return '<div style="cursor:pointer;text-align:center;padding:12px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.03);border-radius:16px" data-id="'+c.id+'"><div style="font-size:28px;margin-bottom:2px">'+c.e+'</div><div style="font-weight:700;font-size:11px">'+c.n+'</div><div style="font-size:8px;color:#64748b;margin-bottom:3px">'+c.m+'</div><span style="font-size:8px;padding:2px 7px;border-radius:10px;font-weight:600;background:'+(c.d==='Easy'?'rgba(34,197,94,.15);color:#22c55e':c.d==='Medium'?'rgba(251,191,36,.15);color:#fbbf24':'rgba(239,68,68,.15);color:#ef4444')+'">'+c.d+'</span></div>';}).join('');
+  $('charGrid').onclick=function(e){var cc=e.target.closest('[data-id]');if(!cc)return;var id=parseInt(cc.dataset.id);G.char=CH.find(function(c){return c.id===id;});G.phrase=pk(PH[G.char.id]);G.isHost=true;G.players=[G.name];G.round=0;G.TOTAL_ROUNDS=1;G.scores={};G.turnScores=[];showRecordScreen();go('p-rec');};
+  go('p-chars');
+}
+
+/* ═══ BUTTON WIRING ═══ */
+$('bCreate').onclick=createRoom;
+$('bJoinNav').onclick=function(){if(!nm())return;go('p-join');};
+$('bJoinBk').onclick=function(){go('p-home');};
+$('bJoin').onclick=joinRoom;
+$('bSolo').onclick=goSolo;
+$('bCharsBk').onclick=function(){go('p-home');};
+$('bLobbyBk').onclick=function(){if(peer)peer.destroy();peer=null;conns=[];hostConn=null;go('p-home');};
+$('bStart').onclick=startGame;
+$('bRec').onclick=doRecCD;
+$('bStop').onclick=function(){if(MR&&MR.state==='recording')MR.stop();};
+var isPlaying=false;
+$('bListen').onclick=function(){
+  if(isPlaying){window.speechSynthesis.cancel();isPlaying=false;$('bListen').textContent='🔊 Listen to Character Voice';$('bListen').style.background='linear-gradient(135deg,#f59e0b,#d97706)';return;}
+  isPlaying=true;$('bListen').textContent='⏹ Playing...';$('bListen').style.background='linear-gradient(135deg,#22c55e,#16a34a)';
+  speakAs(G.char.id,G.phrase,function(){isPlaying=false;$('bListen').textContent='🔊 Listen to Character Voice';$('bListen').style.background='linear-gradient(135deg,#f59e0b,#d97706)';});
+};
+
+/* URL param */
+try{var qp=new URLSearchParams(location.search);if(qp.get('room'))$('iJoinCode').value=qp.get('room');}catch(e){}
+/* Preload voices */
+if(window.speechSynthesis)window.speechSynthesis.onvoiceschanged=function(){window.speechSynthesis.getVoices();};
+});
+</script>
+</body>
+</html>
