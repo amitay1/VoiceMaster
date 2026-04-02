@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>VoiceMaster 🎤</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js"></script>
+
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{background:#0b0f1a;color:#f1f5f9;font-family:-apple-system,system-ui,sans-serif;min-height:100dvh}
@@ -134,7 +134,8 @@ body{background:#0b0f1a;color:#f1f5f9;font-family:-apple-system,system-ui,sans-s
 
 </div>
 
-<script>
+<script type="module">
+import { joinRoom as trysteroJoinRoom } from 'https://esm.sh/trystero@0.23.0/torrent';
 document.addEventListener("DOMContentLoaded",function(){
 
 /* ═══ CHARACTERS ═══ */
@@ -220,8 +221,7 @@ var PH={1:["Turn to page 394.","Obviously.","You have your mother's eyes.","Alwa
 /* ═══ STATE ═══ */
 var G={name:"",isHost:false,code:"",players:[],scores:{},round:0,rounds:[],
   turnIdx:0,turnScores:[],myScore:null,char:null,phrase:"",TOTAL_ROUNDS:4};
-var peer=null,conns=[],hostConn=null;
-var keepAliveInterval=null;
+var room=null,sendMsg=null,hostPeerId=null,peerNames={},peerCount=0;
 var MR,STM,ACX,ANA,DA=[],RTI,WAF,COL,rtVal=0;
 
 /* ═══ HELPERS ═══ */
@@ -234,29 +234,24 @@ function nm(){var n=$('iName').value.trim();if(!n){$('nErr').textContent='Enter 
 function speakAs(id,txt,onEnd){if(!window.speechSynthesis){if(onEnd)onEnd();return;}window.speechSynthesis.cancel();var c=CH.find(function(x){return x.id===id;});var pr=c?c.sp:{p:1,r:1};var u=new SpeechSynthesisUtterance(txt);u.pitch=pr.p;u.rate=pr.r;u.volume=1;var vs=window.speechSynthesis.getVoices();var ev=vs.find(function(v){return v.lang.indexOf('en')===0;})||vs[0];if(ev)u.voice=ev;u.onend=function(){if(onEnd)onEnd();};u.onerror=function(){if(onEnd)onEnd();};window.speechSynthesis.speak(u);}
 function aN(el,val){var t0=Date.now();(function t(){var p=Math.min(1,(Date.now()-t0)/1200);el.textContent=Math.round((1-Math.pow(1-p,3))*val);if(p<1)requestAnimationFrame(t);})();}
 
-/* ═══ PEERJS CONFIG (global) ═══ */
-var PEER_CONFIG = {
-  debug: 1,
-  config: {
-    iceServers: [
-      {urls: 'stun:stun.l.google.com:19302'},
-      {urls: 'stun:stun1.l.google.com:19302'},
-      {urls: 'stun:stun2.l.google.com:19302'},
-      {urls: 'stun:global.stun.twilio.com:3478'},
-      {urls: 'stun:stun.relay.metered.ca:80'},
-      {urls: 'turn:global.relay.metered.ca:80', username:'dc2e3db26b91c3b36c04db0a',credential:'dstNBjMRETpLxLSt'},
-      {urls: 'turn:global.relay.metered.ca:443', username:'dc2e3db26b91c3b36c04db0a',credential:'dstNBjMRETpLxLSt'},
-      {urls: 'turn:global.relay.metered.ca:443?transport=tcp', username:'dc2e3db26b91c3b36c04db0a',credential:'dstNBjMRETpLxLSt'}
-    ]
-  }
-};
+/* ═══ ICE SERVERS CONFIG ═══ */
+var ICE_CONFIG={iceServers:[
+  {urls:'stun:stun.l.google.com:19302'},
+  {urls:'stun:stun1.l.google.com:19302'},
+  {urls:'stun:stun2.l.google.com:19302'},
+  {urls:'stun:global.stun.twilio.com:3478'},
+  {urls:'stun:stun.relay.metered.ca:80'},
+  {urls:'turn:global.relay.metered.ca:80',username:'dc2e3db26b91c3b36c04db0a',credential:'dstNBjMRETpLxLSt'},
+  {urls:'turn:global.relay.metered.ca:443',username:'dc2e3db26b91c3b36c04db0a',credential:'dstNBjMRETpLxLSt'},
+  {urls:'turn:global.relay.metered.ca:443?transport=tcp',username:'dc2e3db26b91c3b36c04db0a',credential:'dstNBjMRETpLxLSt'}
+]};
 function addLog(msg){
   var el=$('lobStatus');if(el)el.innerHTML='<span style="color:#a78bfa;font-size:10px">'+msg+'</span>';
   var el2=$('joinStatus');if(el2&&el2.style.display!=='none')el2.innerHTML='<span style="color:#a78bfa;font-size:10px">'+msg+'</span>';
   console.log('[VM]',msg);
 }
 
-/* ═══ PEERJS MULTIPLAYER ═══ */
+/* ═══ TRYSTERO MULTIPLAYER ═══ */
 function createRoom(){
   if(!nm())return;
 
@@ -267,48 +262,55 @@ function createRoom(){
   }
 
   G.isHost=true;G.code=gc();G.players=[G.name];G.scores={};G.round=0;G.turnScores=[];
-  var prefix='vm-'+G.code.toLowerCase();
-  if(peer)peer.destroy();
+  if(room){room.leave();room=null;}
+  peerNames={};peerCount=0;
 
-  peer=new Peer(prefix, PEER_CONFIG);
-  peer.on('open',function(id){
-    addLog('✅ Room ready! ID: '+id+' | Waiting for players...');
-    console.log('[VM] HOST: Peer registered as',id);
-    renderLobby();go('p-lobby');
-    /* Keep connection alive by checking periodically */
-    if(keepAliveInterval)clearInterval(keepAliveInterval);
-    keepAliveInterval=setInterval(function(){
-      if(peer&&peer.disconnected){addLog('⚠️ Reconnecting...');try{peer.reconnect();}catch(e){}}
-    },15000);
-  });
-  peer.on('connection',function(conn){
-    console.log('[VM] HOST: New connection from',conn.metadata?.name||'unknown');
+  var r=trysteroJoinRoom({appId:'voicemaster-v1',rtcConfig:ICE_CONFIG},'vm-'+G.code.toLowerCase());
+  room=r;
+  var actions=r.makeAction('msg');
+  sendMsg=actions[0];
+
+  r.onPeerJoin(function(peerId){
+    peerCount++;
     addLog('🔗 New player connecting...');
-    conn.on('open',function(){
-      console.log('[VM] HOST: Connection opened with',conn.metadata?.name);
-    });
-    conn.on('data',function(d){hostHandle(conn,d);});
-    conn.on('close',function(){
-      conns=conns.filter(function(c){return c!==conn;});
-      if(conn.metadata&&conn.metadata.name){G.players=G.players.filter(function(p){return p!==conn.metadata.name;});}
-      broadcastLobby();renderLobby();addLog('👋 Player disconnected');
-    });
-    conns.push(conn);
+    sendMsg({type:'host_announce'},peerId);
   });
-  peer.on('error',function(e){
-    console.log('[VM] HOST error:',e.type,e);
-    if(e.type==='unavailable-id'){G.code=gc();createRoom();return;}
-    addLog('⚠️ Error: '+e.type);
-    $('nErr').textContent='Connection error: '+e.type;$('nErr').style.display='block';
+  r.onPeerLeave(function(peerId){
+    peerCount=Math.max(0,peerCount-1);
+    var name=peerNames[peerId];delete peerNames[peerId];
+    if(name){G.players=G.players.filter(function(p){return p!==name;});}
+    broadcastLobby();renderLobby();addLog('👋 Player disconnected');
   });
-  peer.on('disconnected',function(){
-    addLog('⚠️ Disconnected from server, reconnecting...');
-    console.log('[VM] HOST: Disconnected, attempting reconnect');
-    try{peer.reconnect();}catch(e){console.log('[VM] Reconnect failed:',e);}
+  actions[1](function(data,peerId){
+    if(data.type==='who_is_host'){sendMsg({type:'host_announce'},peerId);return;}
+    if(data.type==='join'){
+      var assignedName=data.name;var suffix=2;
+      while(G.players.indexOf(assignedName)>=0&&suffix<100){assignedName=data.name+suffix;suffix++;}
+      peerNames[peerId]=assignedName;G.players.push(assignedName);
+      if(assignedName!==data.name)sendMsg({type:'name_assigned',name:assignedName},peerId);
+      broadcastLobby();renderLobby();return;
+    }
+    if(data.type==='score'){
+      G.turnScores.push({player:data.name,score:data.score,round:G.round});
+      if(!G.scores[data.name])G.scores[data.name]=0;
+      G.scores[data.name]+=data.score;
+      var roundScores=G.turnScores.filter(function(s){return s.round===G.round;});
+      if(roundScores.length>=G.players.length){
+        broadcast({type:'round_end',turnScores:G.turnScores,scores:G.scores,round:G.round});
+        showRoundSummary();
+      }else{
+        var nextIdx=roundScores.length;
+        broadcast({type:'turn',round:G.round,charId:G.char.id,phrase:G.phrase,turnPlayer:G.players[nextIdx],turnIdx:nextIdx,turnScores:G.turnScores,scores:G.scores});
+        handleMyTurn(G.players[nextIdx]);
+      }
+    }
   });
+
+  renderLobby();go('p-lobby');
+  addLog('✅ Room ready! Code: '+G.code+' | Waiting for players...');
 }
 
-function joinRoom(){
+function connectToRoom(){
   var code=$('iJoinCode').value.trim().toUpperCase();
   if(!code||code.length<3){$('joinErr').textContent='Enter a valid code!';$('joinErr').style.display='block';return;}
   if(!nm())return;
@@ -320,112 +322,49 @@ function joinRoom(){
 
   G.isHost=false;G.code=code;
   $('joinErr').style.display='none';
-  var prefix='vm-'+code.toLowerCase();
-  var attempt=0;var maxAttempts=5;
+  hostPeerId=null;peerCount=0;
+  if(room){room.leave();room=null;}
 
-  function tryConnect(){
-    attempt++;
-    $('joinStatus').innerHTML='<div style="width:20px;height:20px;border:2px solid #8b5cf6;border-top-color:transparent;border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px"></div>Connecting... (attempt '+attempt+'/'+maxAttempts+')';
-    $('joinStatus').style.display='block';
+  $('joinStatus').innerHTML='<div style="width:20px;height:20px;border:2px solid #8b5cf6;border-top-color:transparent;border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px"></div>Connecting to room...';
+  $('joinStatus').style.display='block';
 
-    if(peer)try{peer.destroy();}catch(e){}
-    peer=new Peer(undefined, PEER_CONFIG);
+  var r=trysteroJoinRoom({appId:'voicemaster-v1',rtcConfig:ICE_CONFIG},'vm-'+code.toLowerCase());
+  room=r;
+  var actions=r.makeAction('msg');
+  sendMsg=actions[0];
 
-    var connected=false;
-    var timeout=setTimeout(function(){
-      if(!connected){
-        console.log('[VM] Attempt '+attempt+' timed out');
-        try{peer.destroy();}catch(e){}
-        if(attempt<maxAttempts){
-          $('joinStatus').innerHTML='<span style="color:#fbbf24;font-size:11px">⏳ Retrying in 3 seconds... ('+attempt+'/'+maxAttempts+')</span>';
-          setTimeout(tryConnect,3000);
-        }else{
-          $('joinStatus').style.display='none';
-          $('joinErr').innerHTML='❌ Could not find room "<b>'+code+'</b>" after '+maxAttempts+' attempts.<br><span style="font-size:10px;color:#94a3b8">Make sure:<br>• The host still has the room open<br>• Both of you use the SAME link ('+location.origin+')<br>• The code is typed correctly</span>';
-          $('joinErr').style.display='block';
-        }
-      }
-    },12000);
-
-    peer.on('open',function(myId){
-      console.log('[VM] Attempt '+attempt+': My peer ID:',myId,'. Looking for:',prefix);
-      $('joinStatus').innerHTML='<div style="width:20px;height:20px;border:2px solid #22c55e;border-top-color:transparent;border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px"></div>Connected to server! Looking for room '+code+'...';
-
-      setTimeout(function(){
-        hostConn=peer.connect(prefix,{metadata:{name:G.name},reliable:true,serialization:'json'});
-        if(!hostConn){
-          if(attempt<maxAttempts){setTimeout(tryConnect,2000);}
-          return;
-        }
-        hostConn.on('open',function(){
-          connected=true;clearTimeout(timeout);
-          console.log('[VM] Connected to host!');
-          hostConn.send({type:'join',name:G.name});
-          $('joinStatus').innerHTML='<span class="dot" style="background:#22c55e"></span> Connected! Joining lobby...';
-        });
-        hostConn.on('data',function(d){guestHandle(d);});
-        hostConn.on('close',function(){alert('Host disconnected');go('p-home');});
-        hostConn.on('error',function(err){
-          console.log('[VM] Conn error:',err);
-          if(!connected&&attempt<maxAttempts){clearTimeout(timeout);setTimeout(tryConnect,2000);}
-        });
-      },500);
-    });
-
-    peer.on('error',function(e){
-      console.log('[VM] Peer error attempt '+attempt+':',e.type);
-      if(e.type==='peer-unavailable'&&!connected){
-        clearTimeout(timeout);
-        if(attempt<maxAttempts){
-          $('joinStatus').innerHTML='<span style="color:#fbbf24;font-size:11px">⏳ Room not found yet, retrying... ('+attempt+'/'+maxAttempts+')</span>';
-          setTimeout(tryConnect,3000);
-        }else{
-          $('joinStatus').style.display='none';
-          $('joinErr').innerHTML='❌ Room "<b>'+code+'</b>" not found!<br><span style="font-size:10px;color:#94a3b8">The host needs to keep the room page open.<br>Make sure you\'re both on: '+location.origin+'</span>';
-          $('joinErr').style.display='block';
-        }
-      }else if(!connected){
-        clearTimeout(timeout);
-        $('joinStatus').style.display='none';
-        $('joinErr').innerHTML='Error: '+e.type;$('joinErr').style.display='block';
-      }
-    });
-  }
-
-  tryConnect();
-}
-
-/* HOST: handle messages from guests */
-function hostHandle(conn,msg){
-  if(msg.type==='join'){
-    var assignedName=msg.name;
-    var suffix=2;
-    while(G.players.indexOf(assignedName)>=0&&suffix<100){assignedName=msg.name+suffix;suffix++;}
-    conn.metadata={name:assignedName};
-    G.players.push(assignedName);
-    if(assignedName!==msg.name)conn.send({type:'name_assigned',name:assignedName});
-    broadcastLobby();renderLobby();
-  }
-  if(msg.type==='score'){
-    G.turnScores.push({player:msg.name,score:msg.score,round:G.round});
-    if(!G.scores[msg.name])G.scores[msg.name]=0;
-    G.scores[msg.name]+=msg.score;
-    // Check if all players scored this round
-    var roundScores=G.turnScores.filter(function(s){return s.round===G.round;});
-    if(roundScores.length>=G.players.length){
-      broadcast({type:'round_end',turnScores:G.turnScores,scores:G.scores,round:G.round});
-      showRoundSummary();
-    }else{
-      // Next player's turn
-      var nextIdx=roundScores.length;
-      broadcast({type:'turn',round:G.round,charId:G.char.id,phrase:G.phrase,turnPlayer:G.players[nextIdx],turnIdx:nextIdx,turnScores:G.turnScores,scores:G.scores});
-      handleMyTurn(G.players[nextIdx]);
+  var connected=false;
+  var timeout=setTimeout(function(){
+    if(!connected){
+      $('joinStatus').style.display='none';
+      $('joinErr').innerHTML='❌ Could not find room "<b>'+code+'</b>".<br><span style="font-size:10px;color:#94a3b8">Make sure:<br>• The host still has the room open<br>• Both of you use the SAME link ('+location.origin+')<br>• The code is typed correctly</span>';
+      $('joinErr').style.display='block';
+      r.leave();room=null;
     }
-  }
+  },20000);
+
+  r.onPeerJoin(function(peerId){
+    peerCount++;
+    sendMsg({type:'who_is_host'},peerId);
+  });
+  r.onPeerLeave(function(peerId){
+    peerCount=Math.max(0,peerCount-1);
+    if(peerId===hostPeerId){alert('Host disconnected');go('p-home');}
+  });
+  actions[1](function(data,peerId){
+    if(data.type==='host_announce'&&!connected){
+      connected=true;clearTimeout(timeout);
+      hostPeerId=peerId;
+      sendMsg({type:'join',name:G.name},peerId);
+      $('joinStatus').innerHTML='<span class="dot" style="background:#22c55e"></span> Connected! Joining lobby...';
+      return;
+    }
+    guestHandle(data);
+  });
 }
 
 function broadcastLobby(){broadcast({type:'lobby',players:G.players,code:G.code});}
-function broadcast(msg){conns.forEach(function(c){try{c.send(msg);}catch(e){}});}
+function broadcast(msg){if(sendMsg)sendMsg(msg);}
 
 /* GUEST: handle messages from host */
 function guestHandle(msg){
@@ -502,7 +441,7 @@ function submitScore(score){
       handleMyTurn(G.players[nextIdx]);
     }
   }else{
-    hostConn.send({type:'score',name:G.name,score:score,round:G.round});
+    sendMsg({type:'score',name:G.name,score:score,round:G.round},hostPeerId);
     // Show waiting for others
     showWaitScreen("others to finish");go('p-wait');
   }
@@ -511,7 +450,7 @@ function submitScore(score){
 /* ═══ UI RENDERS ═══ */
 function renderLobby(){
   $('lobCode').textContent=G.code;
-  $('lobStatus').innerHTML='<span class="dot '+(conns.length||!G.isHost?'':'pulse-dot')+'" style="background:#22c55e"></span> <span style="color:#22c55e;font-size:11px">Connected · '+(G.isHost?'You are the Host':'You joined as Guest')+'</span>';
+  $('lobStatus').innerHTML='<span class="dot '+(peerCount||!G.isHost?'':'pulse-dot')+'" style="background:#22c55e"></span> <span style="color:#22c55e;font-size:11px">Connected · '+(G.isHost?'You are the Host':'You joined as Guest')+'</span>';
   $('lobPlayers').innerHTML='<div class="lb" style="margin-bottom:8px">Players ('+G.players.length+')</div>'+G.players.map(function(p,i){
     return '<div class="rw"><div class="av" style="background:hsl('+(i*55+200)+',55%,50%)">'+p[0]+'</div><div style="flex:1"><div style="font-weight:700;font-size:12px">'+p+(p===G.name?' (You)':'')+'</div><div style="font-size:8px;color:'+(i===0?'#ec4899':'#22c55e')+'">'+(i===0?'👑 Host':'✓ Connected')+'</div></div></div>';
   }).join('');
@@ -669,10 +608,10 @@ function goSolo(){
 $('bCreate').onclick=createRoom;
 $('bJoinNav').onclick=function(){if(!nm())return;go('p-join');};
 $('bJoinBk').onclick=function(){go('p-home');};
-$('bJoin').onclick=joinRoom;
+$('bJoin').onclick=connectToRoom;
 $('bSolo').onclick=goSolo;
 $('bCharsBk').onclick=function(){go('p-home');};
-$('bLobbyBk').onclick=function(){if(keepAliveInterval){clearInterval(keepAliveInterval);keepAliveInterval=null;}if(peer)peer.destroy();peer=null;conns=[];hostConn=null;go('p-home');};
+$('bLobbyBk').onclick=function(){if(room){room.leave();room=null;}sendMsg=null;hostPeerId=null;peerNames={};peerCount=0;go('p-home');};
 $('bStart').onclick=startGame;
 $('bRec').onclick=doRecCD;
 $('bStop').onclick=function(){if(MR&&MR.state==='recording')MR.stop();};
